@@ -16,7 +16,7 @@ import (
 
 var (
 	// These variables are set at build time via -ldflags
-	version = "dev"    //nolint:unused
+	version = "dev"
 	commit  = "none"   //nolint:unused
 	date    = "unknown" //nolint:unused
 )
@@ -59,7 +59,7 @@ func main() {
 	taskManager := task.NewManager(manifest, processManager)
 
 	// Create MCP server (pass loaded flag so init tool is only available when needed)
-	mcpServer := server.NewServer(manifest, taskManager, loaded)
+	mcpServer := server.NewServer(manifest, taskManager, loaded, version)
 
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)

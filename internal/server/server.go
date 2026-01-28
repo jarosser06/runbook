@@ -15,11 +15,11 @@ type Server struct {
 }
 
 // NewServer creates a new MCP server with task management
-func NewServer(manifest *config.Manifest, manager *task.Manager, configLoaded bool) *Server {
+func NewServer(manifest *config.Manifest, manager *task.Manager, configLoaded bool, version string) *Server {
 	// Create MCP server with capabilities
 	mcpServer := server.NewMCPServer(
 		"dev-toolkit-mcp",
-		"1.0.0",
+		version,
 		server.WithToolCapabilities(true),
 		server.WithResourceCapabilities(true, false),
 		server.WithPromptCapabilities(true),
