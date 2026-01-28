@@ -29,6 +29,13 @@
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
       }
+    },
+    "dev-toolkit-mcp": {
+      "command": "${PWD}/bin/dev-toolkit-mcp",
+      "args": [
+        "-config",
+        "${PWD}/examples/basic/mcp-tasks.yaml"
+      ]
     }
   }
 }

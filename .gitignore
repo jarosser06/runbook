@@ -30,3 +30,10 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Build output
+bin/
+dist/
+
+# Dev tools directory (logs, PIDs, etc.)
+._dev_tools/

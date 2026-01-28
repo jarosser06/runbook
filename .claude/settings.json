@@ -1,0 +1,12 @@
+{
+  "enableAllProjectMcpServers": true,
+  "permissions": {
+    "allow": [
+      "mcp__serena__*",
+      "mcp__context7__*",
+      "mcp__github__*",
+      "mcp__dev-toolkit-mcp__*"
+    ],
+    "deny": []
+  }
+}

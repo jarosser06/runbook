@@ -1,0 +1,151 @@
+version: "1.0"
+
+defaults:
+  timeout: 300
+  shell: "/bin/bash"
+
+tasks:
+  build:
+    description: "Build the project"
+    command: "mkdir -p bin && go build -o bin/dev-toolkit-mcp main.go"
+    type: oneshot
+
+  test:
+    description: "Run all tests"
+    command: "go test -v -race -coverprofile=coverage.out ./... && go tool cover -func=coverage.out"
+    type: oneshot
+    timeout: 600
+
+  lint:
+    description: "Run linter"
+    command: "golangci-lint run ./..."
+    type: oneshot
+
+  clean:
+    description: "Clean build artifacts"
+    command: "rm -rf bin/ coverage.out"
+    type: oneshot
+
+  install:
+    description: "Install dependencies"
+    command: "go mod download && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"
+    type: oneshot
+    timeout: 600
+
+  tidy:
+    description: "Tidy go.mod and go.sum"
+    command: "go mod tidy"
+    type: oneshot
+
+  go_build:
+    description: "Build with custom options"
+    command: "go build {{.flags}} -o {{.output}} {{.package}}"
+    type: oneshot
+    parameters:
+      flags:
+        type: string
+        required: false
+        description: "Build flags (e.g., '-race', '-v')"
+        default: ""
+      output:
+        type: string
+        required: false
+        description: "Output binary path"
+        default: "bin/app"
+      package:
+        type: string
+        required: false
+        description: "Package to build"
+        default: "."
+
+  go_test:
+    description: "Run tests with custom options"
+    command: "go test {{.flags}} {{.package}}"
+    type: oneshot
+    parameters:
+      flags:
+        type: string
+        required: false
+        description: "Test flags (e.g., '-v', '-race', '-cover')"
+        default: "-v"
+      package:
+        type: string
+        required: false
+        description: "Package to test"
+        default: "./..."
+
+  echo_message:
+    description: "Echo a custom message"
+    command: "echo '{{.message}}'"
+    type: oneshot
+    parameters:
+      message:
+        type: string
+        required: true
+        description: "The message to echo"
+
+  create_file:
+    description: "Create a file with content"
+    command: "echo '{{.content}}' > {{.filename}}"
+    type: oneshot
+    parameters:
+      filename:
+        type: string
+        required: true
+        description: "Name of the file to create"
+      content:
+        type: string
+        required: true
+        description: "Content to write to the file"
+
+  grep_search:
+    description: "Search for a pattern in files"
+    command: "grep -r '{{.pattern}}' {{.path}}"
+    type: oneshot
+    parameters:
+      pattern:
+        type: string
+        required: true
+        description: "Pattern to search for"
+      path:
+        type: string
+        required: false
+        description: "Path to search in (default: current directory)"
+        default: "."
+
+task_groups:
+  ci:
+    description: "CI/CD pipeline"
+    tasks:
+      - lint
+      - test
+      - build
+
+  utilities:
+    description: "Utility commands"
+    tasks:
+      - echo_message
+      - create_file
+      - grep_search
+
+prompts:
+  dev_setup:
+    description: "Guide for setting up development environment"
+    content: |
+      # Dev Toolkit MCP - Development Setup
+
+      ## Initial Setup
+      1. Install dependencies: {{.Tasks.install.Run}}
+
+      ## Development Workflow
+      1. Run linter: {{.Tasks.lint.Run}}
+      2. Run tests: {{.Tasks.test.Run}}
+      3. Build project: {{.Tasks.build.Run}}
+
+      ## Clean Up
+      - Clean artifacts: {{.Tasks.clean.Run}}
+
+      ## Utility Commands
+      - Echo message: {{.Tasks.echo_message.Run}}
+      - Create file: {{.Tasks.create_file.Run}}
+      - Search files: {{.Tasks.grep_search.Run}}
