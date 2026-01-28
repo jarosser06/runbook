@@ -58,14 +58,9 @@ func validateTask(name string, task Task, allTasks map[string]Task) error {
 		errors = append(errors, fmt.Sprintf("task '%s': command is required", name))
 	}
 
-	// Validate task type
+	// Validate task type (defaults are applied in parser.go applyDefaults)
 	if task.Type != "" && task.Type != TaskTypeOneShot && task.Type != TaskTypeDaemon {
 		errors = append(errors, fmt.Sprintf("task '%s': invalid type '%s' (must be 'oneshot' or 'daemon')", name, task.Type))
-	}
-
-	// Default to oneshot if not specified
-	if task.Type == "" {
-		task.Type = TaskTypeOneShot
 	}
 
 	// Validate parameters

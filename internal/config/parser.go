@@ -29,6 +29,11 @@ func ParseManifest(path string) (*Manifest, error) {
 // Task-level values take precedence over manifest-level defaults
 func applyDefaults(manifest *Manifest) {
 	for taskName, task := range manifest.Tasks {
+		// Default task type to oneshot if not specified
+		if task.Type == "" {
+			task.Type = TaskTypeOneShot
+		}
+
 		// Apply default timeout if not set
 		if task.Timeout == 0 && manifest.Defaults.Timeout > 0 {
 			task.Timeout = manifest.Defaults.Timeout
