@@ -14,6 +14,13 @@ func Validate(manifest *Manifest) error {
 		errors = append(errors, "version is required")
 	}
 
+	// Validate imports
+	for i, importPath := range manifest.Imports {
+		if importPath == "" {
+			errors = append(errors, fmt.Sprintf("import at index %d cannot be empty", i))
+		}
+	}
+
 	// Validate tasks - allow empty task map (for fresh init), but not nil
 	if manifest.Tasks == nil {
 		errors = append(errors, "tasks map must be initialized")

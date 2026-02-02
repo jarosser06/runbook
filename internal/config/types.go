@@ -13,6 +13,7 @@ const (
 // Manifest represents the complete task configuration
 type Manifest struct {
 	Version    string                 `yaml:"version"`
+	Imports    []string               `yaml:"imports,omitempty"`
 	Tasks      map[string]Task        `yaml:"tasks"`
 	TaskGroups map[string]TaskGroup   `yaml:"task_groups"`
 	Prompts    map[string]Prompt      `yaml:"prompts"`

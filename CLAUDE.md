@@ -173,6 +173,146 @@ To add new tasks:
 2. Restart Claude Code to reload configuration
 3. New tools will be available as `run_<taskname>`
 
+## Multi-File Configuration (Imports)
+
+The MCP server supports splitting tasks, prompts, and task groups across multiple YAML files using the `imports` field. This enables modular configuration and packaging individual commands with tools like dex.
+
+### Basic Import Example
+
+**Main config (mcp-tasks.yaml):**
+```yaml
+version: "1.0"
+
+imports:
+  - "./tasks/build.yaml"
+  - "./tasks/test.yaml"
+
+defaults:
+  timeout: 300
+  shell: "/bin/bash"
+
+tasks:
+  main:
+    description: "Main task"
+    command: "echo 'Hello from main config'"
+```
+
+**Imported file (tasks/build.yaml):**
+```yaml
+version: "1.0"
+
+tasks:
+  build:
+    description: "Build the project"
+    command: "go build -o bin/app ."
+```
+
+### Import Features
+
+- **Glob patterns**: Use wildcards to import multiple files
+  ```yaml
+  imports:
+    - "./tasks/*.yaml"
+    - "./prompts/dev/*.yaml"
+  ```
+
+- **Nested imports**: Imported files can have their own imports
+  ```yaml
+  # main.yaml imports level1.yaml
+  # level1.yaml imports level2.yaml
+  # All files are merged recursively
+  ```
+
+- **Relative paths**: Paths are resolved relative to the importing file
+  ```yaml
+  # In ./configs/main.yaml
+  imports:
+    - "./tasks/build.yaml"  # Resolves to ./configs/tasks/build.yaml
+  ```
+
+### Merge Behavior
+
+When multiple files are imported:
+
+- **Tasks**: Merged into a single task map. Duplicate task names cause an error.
+- **TaskGroups**: Merged into a single map. Duplicate group names cause an error.
+- **Prompts**: Merged into a single map. Duplicate prompt names cause an error.
+- **Defaults**: Only the main file's defaults are used (imported defaults are ignored).
+- **Version**: Only the main file's version is used.
+
+### Error Handling
+
+The import system detects common issues:
+
+- **Circular imports**: Returns error with the dependency chain
+  ```
+  Error: circular import detected: a.yaml -> b.yaml -> a.yaml
+  ```
+
+- **Duplicate keys**: Returns error specifying which files have conflicts
+  ```
+  Error: duplicate task name 'build' found during merge
+  ```
+
+- **Missing files**: Returns error if import pattern matches no files
+  ```
+  Error: import pattern './nonexistent/*.yaml' matched no files
+  ```
+
+### Dex Integration Pattern
+
+The import system is designed to work seamlessly with dex packages:
+
+```yaml
+version: "1.0"
+
+imports:
+  - "./.dex/*/tasks.yaml"    # Load all dex-installed tasks
+  - "./local-tasks.yaml"      # Local project tasks
+
+defaults:
+  timeout: 300
+  shell: "/bin/bash"
+```
+
+A dex package structure might look like:
+```
+.dex/
+  my-commands/
+    tasks.yaml              # Task definitions
+    docs/context.md         # Documentation
+```
+
+### File Organization Patterns
+
+**Pattern A - Split by type:**
+```
+mcp-tasks.yaml              # Main config with imports
+tasks/
+  build.yaml                # Build tasks
+  test.yaml                 # Test tasks
+prompts/
+  dev.yaml                  # Development prompts
+```
+
+**Pattern B - Split by feature:**
+```
+mcp-tasks.yaml              # Main config
+features/
+  golang/
+    tasks.yaml              # Go-specific tasks
+    prompts.yaml            # Go-specific prompts
+  docker/
+    tasks.yaml              # Docker tasks
+```
+
+### Backward Compatibility
+
+The import system is fully backward compatible:
+- Existing single-file configurations work without changes
+- Empty or missing `imports` field = single-file behavior
+- All existing LoadManifest search paths still work
+
 ## Summary
 
 **Always prefer MCP tools over raw bash commands for development tasks.** This ensures consistency, logging, and proper error handling across all development workflows.
