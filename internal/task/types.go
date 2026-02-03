@@ -15,6 +15,7 @@ type ExecutionResult struct {
 	TaskName     string        `json:"task_name"`
 	LogPath      string        `json:"log_path,omitempty"`
 	TimedOut     bool          `json:"timed_out"`
+	SessionID    string        `json:"session_id,omitempty"`
 }
 
 // DaemonStatus represents the status of a daemon task
@@ -24,14 +25,16 @@ type DaemonStatus struct {
 	StartTime time.Time `json:"start_time,omitempty"`
 	Uptime    string    `json:"uptime,omitempty"`
 	LogPath   string    `json:"log_path"`
+	SessionID string    `json:"session_id,omitempty"`
 }
 
 // DaemonStartResult represents the result of starting a daemon
 type DaemonStartResult struct {
-	Success bool   `json:"success"`
-	PID     int    `json:"pid"`
-	LogPath string `json:"log_path"`
-	Error   string `json:"error,omitempty"`
+	Success   bool   `json:"success"`
+	PID       int    `json:"pid"`
+	LogPath   string `json:"log_path"`
+	Error     string `json:"error,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // DaemonStopResult represents the result of stopping a daemon

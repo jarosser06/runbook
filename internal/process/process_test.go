@@ -35,7 +35,7 @@ func TestManagerStartStop(t *testing.T) {
 	logPath := logs.GetLogPath("test-daemon")
 
 	// Start daemon
-	err = manager.Start("test-daemon", "sleep 10", nil, "", logPath)
+	err = manager.Start("test-daemon", "test-session-id", "sleep 10", nil, "", logPath)
 	if err != nil {
 		t.Fatalf("failed to start daemon: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestManagerDoubleStart(t *testing.T) {
 	logPath := logs.GetLogPath("test-daemon")
 
 	// Start daemon
-	err = manager.Start("test-daemon", "sleep 10", nil, "", logPath)
+	err = manager.Start("test-daemon", "test-session-id", "sleep 10", nil, "", logPath)
 	if err != nil {
 		t.Fatalf("failed to start daemon: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestManagerDoubleStart(t *testing.T) {
 	}()
 
 	// Try to start again
-	err = manager.Start("test-daemon", "sleep 10", nil, "", logPath)
+	err = manager.Start("test-daemon", "test-session-id", "sleep 10", nil, "", logPath)
 	if err == nil {
 		t.Errorf("expected error when starting already running daemon")
 	}
@@ -161,7 +161,7 @@ func TestManagerStopAll(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		taskName := fmt.Sprintf("daemon-%d", i)
 		logPath := logs.GetLogPath(taskName)
-		err := manager.Start(taskName, "sleep 10", nil, "", logPath)
+		err := manager.Start(taskName, "test-session-id", "sleep 10", nil, "", logPath)
 		if err != nil {
 			t.Fatalf("failed to start daemon %s: %v", taskName, err)
 		}
@@ -211,7 +211,7 @@ func TestManagerProcessExit(t *testing.T) {
 	logPath := logs.GetLogPath("test-daemon")
 
 	// Start daemon that exits quickly
-	err = manager.Start("test-daemon", "echo 'hello'", nil, "", logPath)
+	err = manager.Start("test-daemon", "test-session-id", "echo 'hello'", nil, "", logPath)
 	if err != nil {
 		t.Fatalf("failed to start daemon: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestManagerEnvironmentVariables(t *testing.T) {
 
 	// Start daemon with environment variable
 	env := map[string]string{"TEST_VAR": "test_value"}
-	err = manager.Start("test-daemon", "echo $TEST_VAR", env, "", logPath)
+	err = manager.Start("test-daemon", "test-session-id", "echo $TEST_VAR", env, "", logPath)
 	if err != nil {
 		t.Fatalf("failed to start daemon: %v", err)
 	}
@@ -308,7 +308,7 @@ func TestManagerWorkingDirectory(t *testing.T) {
 	logPath := logs.GetLogPath("test-daemon")
 
 	// Start daemon with working directory
-	err = manager.Start("test-daemon", "pwd", nil, testDir, logPath)
+	err = manager.Start("test-daemon", "test-session-id", "pwd", nil, testDir, logPath)
 	if err != nil {
 		t.Fatalf("failed to start daemon: %v", err)
 	}
@@ -355,7 +355,7 @@ func TestManagerGetProcessInfo(t *testing.T) {
 	logPath := logs.GetLogPath("test-daemon")
 
 	// Start daemon
-	err = manager.Start("test-daemon", "sleep 10", nil, "", logPath)
+	err = manager.Start("test-daemon", "test-session-id", "sleep 10", nil, "", logPath)
 	if err != nil {
 		t.Fatalf("failed to start daemon: %v", err)
 	}

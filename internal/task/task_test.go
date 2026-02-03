@@ -17,8 +17,9 @@ type MockProcessManager struct {
 }
 
 type mockProcess struct {
-	pid     int
-	running bool
+	pid       int
+	running   bool
+	sessionID string
 }
 
 func NewMockProcessManager() *MockProcessManager {
@@ -27,13 +28,14 @@ func NewMockProcessManager() *MockProcessManager {
 	}
 }
 
-func (m *MockProcessManager) Start(taskName string, cmd string, env map[string]string, cwd string, logPath string) error {
+func (m *MockProcessManager) Start(taskName string, sessionID string, cmd string, env map[string]string, cwd string, logPath string) error {
 	if _, exists := m.processes[taskName]; exists && m.processes[taskName].running {
 		return fmt.Errorf("process already running")
 	}
 	m.processes[taskName] = &mockProcess{
-		pid:     12345,
-		running: true,
+		pid:       12345,
+		running:   true,
+		sessionID: sessionID,
 	}
 	return nil
 }
@@ -58,6 +60,13 @@ func (m *MockProcessManager) StopAll() error {
 		proc.running = false
 	}
 	return nil
+}
+
+func (m *MockProcessManager) GetSessionID(taskName string) (string, error) {
+	if proc, exists := m.processes[taskName]; exists {
+		return proc.sessionID, nil
+	}
+	return "", fmt.Errorf("process not found")
 }
 
 func TestExecutorExecute(t *testing.T) {

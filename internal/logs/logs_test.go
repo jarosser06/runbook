@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSetup(t *testing.T) {
@@ -90,8 +91,17 @@ func TestNewWriter(t *testing.T) {
 		t.Fatalf("Setup failed: %v", err)
 	}
 
+	// Create session metadata
+	sessionID := GenerateSessionID()
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		TaskName:  "test-task",
+		TaskType:  "oneshot",
+		StartTime: time.Now(),
+	}
+
 	// Create writer
-	writer, err := NewWriter("test-task")
+	writer, err := NewWriter(sessionID, metadata)
 	if err != nil {
 		t.Fatalf("NewWriter failed: %v", err)
 	}
@@ -125,8 +135,17 @@ func TestWriterWrite(t *testing.T) {
 		t.Fatalf("Setup failed: %v", err)
 	}
 
+	// Create session metadata
+	sessionID := GenerateSessionID()
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		TaskName:  "test-task",
+		TaskType:  "oneshot",
+		StartTime: time.Now(),
+	}
+
 	// Create writer
-	writer, err := NewWriter("test-task")
+	writer, err := NewWriter(sessionID, metadata)
 	if err != nil {
 		t.Fatalf("NewWriter failed: %v", err)
 	}
@@ -160,6 +179,10 @@ func TestWriterWrite(t *testing.T) {
 }
 
 func TestLogRotation(t *testing.T) {
+	// Note: Log rotation is no longer applicable with session-based logging
+	// Each session has its own directory, so logs are naturally bounded
+	// This test is kept for backward compatibility but tests session isolation instead
+
 	// Create temporary directory for test
 	tmpDir := t.TempDir()
 	oldWd, err := os.Getwd()
@@ -181,40 +204,46 @@ func TestLogRotation(t *testing.T) {
 		t.Fatalf("Setup failed: %v", err)
 	}
 
-	// Create a large log file that exceeds MaxLogSize
-	logPath := GetLogPath("test-task")
-	largeData := make([]byte, MaxLogSize+1)
-	for i := range largeData {
-		largeData[i] = 'a'
+	// Create two separate sessions
+	sessionID1 := GenerateSessionID()
+	metadata1 := &SessionMetadata{
+		SessionID: sessionID1,
+		TaskName:  "test-task",
+		TaskType:  "oneshot",
+		StartTime: time.Now(),
 	}
 
-	if err := os.WriteFile(logPath, largeData, 0644); err != nil {
-		t.Fatalf("failed to create large log file: %v", err)
-	}
-
-	// Create writer which should trigger rotation
-	writer, err := NewWriter("test-task")
+	writer1, err := NewWriter(sessionID1, metadata1)
 	if err != nil {
 		t.Fatalf("NewWriter failed: %v", err)
 	}
-	defer writer.Close()
+	writer1.Write([]byte("session 1 data"))
+	writer1.Close()
 
-	// Verify rotated file exists
-	files, err := os.ReadDir(LogDir)
+	sessionID2 := GenerateSessionID()
+	metadata2 := &SessionMetadata{
+		SessionID: sessionID2,
+		TaskName:  "test-task",
+		TaskType:  "oneshot",
+		StartTime: time.Now(),
+	}
+
+	writer2, err := NewWriter(sessionID2, metadata2)
 	if err != nil {
-		t.Fatalf("failed to read log directory: %v", err)
+		t.Fatalf("NewWriter failed: %v", err)
+	}
+	writer2.Write([]byte("session 2 data"))
+	writer2.Close()
+
+	// Verify both session directories exist
+	sessionsDir := filepath.Join(LogDir, "sessions")
+	sessions, err := os.ReadDir(sessionsDir)
+	if err != nil {
+		t.Fatalf("failed to read sessions directory: %v", err)
 	}
 
-	rotatedFound := false
-	for _, file := range files {
-		if strings.HasPrefix(file.Name(), "test-task.log.") {
-			rotatedFound = true
-			break
-		}
-	}
-
-	if !rotatedFound {
-		t.Errorf("expected rotated log file to exist")
+	if len(sessions) < 2 {
+		t.Errorf("expected at least 2 session directories, found %d", len(sessions))
 	}
 }
 

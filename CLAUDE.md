@@ -149,14 +149,109 @@ Access comprehensive documentation via MCP resources:
 
 ## Important Notes
 
-### Log Files
-All task executions write logs to `._dev_tools/logs/<task-name>.log`
+### Session-Based Logging
 
-To read logs:
+The dev-toolkit-mcp uses UUID-based session tracking for all task executions. Each execution gets a unique session ID with logs organized in session directories for better traceability and debugging.
+
+#### Log Structure
+
 ```
-Read ._dev_tools/logs/test.log
-Read ._dev_tools/logs/build.log
+._dev_tools/logs/
+  sessions/
+    <uuid>/
+      task.log          # Log output for this execution
+      metadata.json     # Execution details (timestamp, params, exit code, etc.)
+  latest/
+    <task-name> -> ../sessions/<uuid>/  # Symlink to latest session
 ```
+
+#### Session Benefits
+
+- **Traceability**: Each execution has a unique UUID for tracking
+- **Metadata**: Rich execution context (start time, duration, exit code, parameters, etc.)
+- **History**: Keep multiple execution sessions for debugging
+- **No rotation**: Sessions are naturally bounded, no log rotation needed
+
+#### Accessing Logs
+
+**Read latest execution logs:**
+```
+Read ._dev_tools/logs/latest/test/task.log
+```
+
+**List recent sessions:**
+```
+Use list_sessions with task_name="test" and limit=10
+```
+
+**Read session metadata:**
+```
+Use read_session_metadata with session_id="<uuid>"
+```
+
+**Read specific session logs:**
+```
+Use read_session_log with session_id="<uuid>"
+```
+
+#### Session IDs in Results
+
+All MCP tool results now include a `session_id` field:
+
+```json
+{
+  "success": true,
+  "exit_code": 0,
+  "task_name": "test",
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "log_path": "._dev_tools/logs/sessions/550e8400-e29b-41d4-a716-446655440000/task.log"
+}
+```
+
+#### Session Metadata
+
+Each session includes comprehensive metadata:
+
+```json
+{
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "task_name": "test",
+  "task_type": "oneshot",
+  "start_time": "2026-02-02T10:00:00Z",
+  "end_time": "2026-02-02T10:01:30Z",
+  "duration": 90000000000,
+  "exit_code": 0,
+  "success": true,
+  "timed_out": false,
+  "parameters": {},
+  "command": "go test -race -cover ./...",
+  "working_dir": "/path/to/project"
+}
+```
+
+#### Session Management Tools
+
+| Tool | Purpose | Parameters |
+|------|---------|------------|
+| `list_sessions` | List recent sessions | `task_name` (required), `limit` (optional, default 20) |
+| `read_session_metadata` | Read session metadata | `session_id` (required) |
+| `read_session_log` | Read session log | `session_id` (required), `lines` (optional), `filter` (optional) |
+
+#### Daemon Logs with Sessions
+
+Daemon tasks also support session-based logging. Access daemon logs by session:
+
+```
+Use logs_<daemon_name> with session_id="<uuid>"
+```
+
+Or get the current daemon's session ID from its status:
+
+```
+Use status_<daemon_name>
+```
+
+Returns `session_id` in the status response.
 
 ### Race Conditions
 Tests are run with `-race` flag by default. This is intentional and important for catching concurrency bugs.

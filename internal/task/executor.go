@@ -59,6 +59,8 @@ func (e *Executor) Execute(taskName string, params map[string]interface{}) (*Exe
 		return nil, fmt.Errorf("task '%s' is a daemon, use daemon operations instead", taskName)
 	}
 
+	// Generate session ID
+	sessionID := logs.GenerateSessionID()
 	startTime := time.Now()
 
 	// Apply default parameter values
@@ -100,14 +102,32 @@ func (e *Executor) Execute(taskName string, params map[string]interface{}) (*Exe
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
 
+	// Get current working directory for metadata
+	cwd, _ := os.Getwd()
+	if task.CWD != "" {
+		cwd = task.CWD
+	}
+
+	// Create session metadata
+	metadata := &logs.SessionMetadata{
+		SessionID:  sessionID,
+		TaskName:   taskName,
+		TaskType:   "oneshot",
+		StartTime:  startTime,
+		Parameters: params,
+		Command:    command,
+		WorkingDir: cwd,
+	}
+
 	// Create log writer
-	logWriter, err := logs.NewWriter(taskName)
+	logWriter, err := logs.NewWriter(sessionID, metadata)
 	if err != nil {
 		return &ExecutionResult{
-			Success:  false,
-			TaskName: taskName,
-			Error:    fmt.Sprintf("failed to create log writer: %v", err),
-			Duration: time.Since(startTime),
+			Success:   false,
+			TaskName:  taskName,
+			Error:     fmt.Sprintf("failed to create log writer: %v", err),
+			Duration:  time.Since(startTime),
+			SessionID: sessionID,
 		}, nil
 	}
 	defer logWriter.Close()
@@ -188,15 +208,23 @@ func (e *Executor) Execute(taskName string, params map[string]interface{}) (*Exe
 		}
 	}
 
+	// Update writer metadata with execution results
+	logWriter.UpdateMetadata(map[string]interface{}{
+		"exit_code": exitCode,
+		"success":   success,
+		"timed_out": timedOut,
+	})
+
 	return &ExecutionResult{
-		Success:  success,
-		ExitCode: exitCode,
-		Stdout:   stdout,
-		Stderr:   stderr,
-		Duration: duration,
-		Error:    errorMsg,
-		TaskName: taskName,
-		LogPath:  logs.GetLogPath(taskName),
-		TimedOut: timedOut,
+		Success:   success,
+		ExitCode:  exitCode,
+		Stdout:    stdout,
+		Stderr:    stderr,
+		Duration:  duration,
+		Error:     errorMsg,
+		TaskName:  taskName,
+		LogPath:   logWriter.GetLogPath(),
+		TimedOut:  timedOut,
+		SessionID: sessionID,
 	}, nil
 }

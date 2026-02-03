@@ -9,56 +9,88 @@ import (
 
 // Writer handles writing logs to both a file and stdout
 type Writer struct {
-	taskName string
-	file     *os.File
-	logPath  string
+	sessionID string
+	metadata  *SessionMetadata
+	file      *os.File
+	logPath   string
 }
 
-// NewWriter creates a new log writer for a task
-// It opens/creates the log file and sets up dual output
-func NewWriter(taskName string) (*Writer, error) {
-	logPath := GetLogPath(taskName)
-
-	// Check if rotation is needed before opening
-	if err := rotateIfNeeded(taskName, logPath); err != nil {
-		return nil, fmt.Errorf("failed to rotate log: %w", err)
+// NewWriter creates a new log writer for a session
+// It creates the session directory, opens the log file, and writes initial metadata
+func NewWriter(sessionID string, metadata *SessionMetadata) (*Writer, error) {
+	// Create session directory
+	if err := CreateSessionDirectory(sessionID); err != nil {
+		return nil, fmt.Errorf("failed to create session directory: %w", err)
 	}
 
-	// Open log file for appending
+	// Get log path
+	logPath := GetSessionLogPath(sessionID)
+
+	// Open log file for writing
 	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open log file: %w", err)
 	}
 
+	// Write initial metadata
+	if err := WriteSessionMetadata(sessionID, metadata); err != nil {
+		file.Close()
+		return nil, fmt.Errorf("failed to write initial metadata: %w", err)
+	}
+
+	// Create latest symlink
+	if err := CreateLatestLink(metadata.TaskName, sessionID); err != nil {
+		// Non-fatal error - log but continue
+		fmt.Fprintf(os.Stderr, "Warning: failed to create latest symlink: %v\n", err)
+	}
+
 	return &Writer{
-		taskName: taskName,
-		file:     file,
-		logPath:  logPath,
+		sessionID: sessionID,
+		metadata:  metadata,
+		file:      file,
+		logPath:   logPath,
 	}, nil
 }
 
-// Write writes data to both the log file and stdout
+// Write writes data to the log file
 func (w *Writer) Write(p []byte) (n int, err error) {
 	// Write to file
-	n, err = w.file.Write(p)
-	if err != nil {
-		return n, err
-	}
-
-	// Check if rotation is needed after write
-	if err := rotateIfNeeded(w.taskName, w.logPath); err != nil {
-		// Log rotation failure but don't fail the write
-		fmt.Fprintf(os.Stderr, "Warning: log rotation failed: %v\n", err)
-	}
-
-	return n, nil
+	return w.file.Write(p)
 }
 
-// Close closes the log file
+// Close closes the log file and updates session metadata with completion info
 func (w *Writer) Close() error {
 	if w.file != nil {
-		return w.file.Close()
+		if err := w.file.Close(); err != nil {
+			return err
+		}
 	}
+
+	// Update metadata with end time and duration
+	endTime := time.Now()
+	duration := endTime.Sub(w.metadata.StartTime)
+
+	updates := map[string]interface{}{
+		"end_time": endTime,
+		"duration": duration,
+	}
+
+	// Only update exit code and success if they were set in the metadata
+	if w.metadata.ExitCode != nil {
+		updates["exit_code"] = *w.metadata.ExitCode
+	}
+	if w.metadata.Success != nil {
+		updates["success"] = *w.metadata.Success
+	}
+	if w.metadata.TimedOut {
+		updates["timed_out"] = w.metadata.TimedOut
+	}
+
+	if err := UpdateSessionMetadata(w.sessionID, updates); err != nil {
+		// Non-fatal error - log but don't fail the close
+		fmt.Fprintf(os.Stderr, "Warning: failed to update session metadata: %v\n", err)
+	}
+
 	return nil
 }
 
@@ -67,31 +99,26 @@ func (w *Writer) MultiWriter() io.Writer {
 	return io.MultiWriter(w.file, os.Stdout)
 }
 
-// rotateIfNeeded checks if the log file exceeds MaxLogSize and rotates it if necessary
-func rotateIfNeeded(taskName, logPath string) error {
-	info, err := os.Stat(logPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // File doesn't exist yet, no rotation needed
-		}
-		return fmt.Errorf("failed to stat log file: %w", err)
+// UpdateMetadata updates the metadata stored in the writer
+// This is used to update fields like ExitCode, Success, and TimedOut during execution
+func (w *Writer) UpdateMetadata(updates map[string]interface{}) {
+	if exitCode, ok := updates["exit_code"].(int); ok {
+		w.metadata.ExitCode = &exitCode
 	}
-
-	if info.Size() >= MaxLogSize {
-		return rotateLog(taskName, logPath)
+	if success, ok := updates["success"].(bool); ok {
+		w.metadata.Success = &success
 	}
-
-	return nil
+	if timedOut, ok := updates["timed_out"].(bool); ok {
+		w.metadata.TimedOut = timedOut
+	}
 }
 
-// rotateLog rotates a log file by renaming it with a timestamp
-func rotateLog(taskName, logPath string) error {
-	timestamp := time.Now().Unix()
-	rotatedPath := GetRotatedLogPath(taskName, timestamp)
+// GetSessionID returns the session ID
+func (w *Writer) GetSessionID() string {
+	return w.sessionID
+}
 
-	if err := os.Rename(logPath, rotatedPath); err != nil {
-		return fmt.Errorf("failed to rename log file: %w", err)
-	}
-
-	return nil
+// GetLogPath returns the log file path
+func (w *Writer) GetLogPath() string {
+	return w.logPath
 }

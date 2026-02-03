@@ -21,6 +21,18 @@ func Setup() error {
 		return fmt.Errorf("failed to create log directory: %w", err)
 	}
 
+	// Create sessions subdirectory
+	sessionsDir := filepath.Join(LogDir, "sessions")
+	if err := os.MkdirAll(sessionsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create sessions directory: %w", err)
+	}
+
+	// Create latest subdirectory
+	latestDir := filepath.Join(LogDir, "latest")
+	if err := os.MkdirAll(latestDir, 0755); err != nil {
+		return fmt.Errorf("failed to create latest directory: %w", err)
+	}
+
 	// Create parent directory for gitignore
 	devToolsDir := filepath.Dir(LogDir)
 	gitignorePath := filepath.Join(devToolsDir, ".gitignore")

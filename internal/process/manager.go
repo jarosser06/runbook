@@ -7,6 +7,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/jarosser06/dev-toolkit-mcp/internal/logs"
 )
 
 // ProcessInfo holds information about a running process
@@ -15,6 +17,7 @@ type ProcessInfo struct {
 	Cmd       *exec.Cmd
 	StartTime time.Time
 	LogFile   string
+	SessionID string
 	done      chan struct{} // Closed when process exits
 }
 
@@ -32,7 +35,7 @@ func NewManager() *Manager {
 }
 
 // Start starts a new daemon process
-func (pm *Manager) Start(taskName string, cmd string, env map[string]string, cwd string, logPath string) error {
+func (pm *Manager) Start(taskName string, sessionID string, cmd string, env map[string]string, cwd string, logPath string) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -60,6 +63,39 @@ func (pm *Manager) Start(taskName string, cmd string, env map[string]string, cwd
 		command.Env = append(command.Env, fmt.Sprintf("%s=%s", key, value))
 	}
 
+	// Create session directory
+	if err := logs.CreateSessionDirectory(sessionID); err != nil {
+		return fmt.Errorf("failed to create session directory: %w", err)
+	}
+
+	// Get current working directory for metadata
+	workingDir, _ := os.Getwd()
+	if cwd != "" {
+		workingDir = cwd
+	}
+
+	// Create session metadata
+	startTime := time.Now()
+	metadata := &logs.SessionMetadata{
+		SessionID:  sessionID,
+		TaskName:   taskName,
+		TaskType:   "daemon",
+		StartTime:  startTime,
+		Command:    cmd,
+		WorkingDir: workingDir,
+	}
+
+	// Write initial session metadata
+	if err := logs.WriteSessionMetadata(sessionID, metadata); err != nil {
+		return fmt.Errorf("failed to write session metadata: %w", err)
+	}
+
+	// Create latest symlink
+	if err := logs.CreateLatestLink(taskName, sessionID); err != nil {
+		// Non-fatal error
+		fmt.Fprintf(os.Stderr, "Warning: failed to create latest symlink: %v\n", err)
+	}
+
 	// Open log file
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
@@ -81,16 +117,43 @@ func (pm *Manager) Start(taskName string, cmd string, env map[string]string, cwd
 	pm.processes[taskName] = &ProcessInfo{
 		PID:       command.Process.Pid,
 		Cmd:       command,
-		StartTime: time.Now(),
+		StartTime: startTime,
 		LogFile:   logPath,
+		SessionID: sessionID,
 		done:      doneChan,
 	}
 
 	// Monitor process in background
 	go func() {
-		_ = command.Wait() // Process exit status doesn't matter for daemon cleanup
-		_ = logFile.Close() // Ignore close errors during cleanup
-		close(doneChan)     // Signal that Wait() has completed
+		exitErr := command.Wait() // Capture exit status for metadata
+		_ = logFile.Close()        // Ignore close errors during cleanup
+
+		// Update session metadata with end time and exit code
+		endTime := time.Now()
+		duration := endTime.Sub(startTime)
+		exitCode := 0
+		success := true
+
+		if exitErr != nil {
+			if exitStatus, ok := command.ProcessState.Sys().(syscall.WaitStatus); ok {
+				exitCode = exitStatus.ExitStatus()
+			}
+			success = false
+		}
+
+		updates := map[string]interface{}{
+			"end_time":  endTime,
+			"duration":  duration,
+			"exit_code": exitCode,
+			"success":   success,
+		}
+
+		if err := logs.UpdateSessionMetadata(sessionID, updates); err != nil {
+			// Non-fatal error
+			fmt.Fprintf(os.Stderr, "Warning: failed to update session metadata: %v\n", err)
+		}
+
+		close(doneChan) // Signal that Wait() has completed
 		pm.mu.Lock()
 		delete(pm.processes, taskName)
 		pm.mu.Unlock()
@@ -193,6 +256,19 @@ func (pm *Manager) GetProcessInfo(taskName string) (*ProcessInfo, error) {
 	}
 
 	return proc, nil
+}
+
+// GetSessionID returns the session ID for a running daemon
+func (pm *Manager) GetSessionID(taskName string) (string, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	proc, exists := pm.processes[taskName]
+	if !exists {
+		return "", fmt.Errorf("daemon '%s' is not running", taskName)
+	}
+
+	return proc.SessionID, nil
 }
 
 // isProcessAlive checks if a process is alive

@@ -10,9 +10,10 @@ import (
 // ProcessManager interface for daemon operations
 // This will be implemented by the process package
 type ProcessManager interface {
-	Start(taskName string, cmd string, env map[string]string, cwd string, logPath string) error
+	Start(taskName string, sessionID string, cmd string, env map[string]string, cwd string, logPath string) error
 	Stop(taskName string) error
 	Status(taskName string) (bool, int, error)
+	GetSessionID(taskName string) (string, error)
 	StopAll() error
 }
 
@@ -71,11 +72,14 @@ func (m *Manager) StartDaemon(taskName string, params map[string]interface{}) (*
 		}, nil
 	}
 
-	// Get log path
-	logPath := logs.GetLogPath(taskName)
+	// Generate session ID
+	sessionID := logs.GenerateSessionID()
+
+	// Get log path (session-based)
+	logPath := logs.GetSessionLogPath(sessionID)
 
 	// Start daemon
-	if err := m.processManager.Start(taskName, task.Command, task.Env, task.CWD, logPath); err != nil {
+	if err := m.processManager.Start(taskName, sessionID, task.Command, task.Env, task.CWD, logPath); err != nil {
 		return &DaemonStartResult{
 			Success: false,
 			Error:   fmt.Sprintf("failed to start daemon: %v", err),
@@ -92,9 +96,10 @@ func (m *Manager) StartDaemon(taskName string, params map[string]interface{}) (*
 	}
 
 	return &DaemonStartResult{
-		Success: true,
-		PID:     pid,
-		LogPath: logPath,
+		Success:   true,
+		PID:       pid,
+		LogPath:   logPath,
+		SessionID: sessionID,
 	}, nil
 }
 
@@ -165,10 +170,23 @@ func (m *Manager) DaemonStatus(taskName string) (*DaemonStatus, error) {
 		return nil, fmt.Errorf("failed to get status: %w", err)
 	}
 
+	// Get session ID if running
+	sessionID := ""
+	if running {
+		sessionID, _ = m.processManager.GetSessionID(taskName)
+	}
+
+	// Get log path
+	logPath := ""
+	if sessionID != "" {
+		logPath = logs.GetSessionLogPath(sessionID)
+	}
+
 	return &DaemonStatus{
-		Running: running,
-		PID:     pid,
-		LogPath: logs.GetLogPath(taskName),
+		Running:   running,
+		PID:       pid,
+		LogPath:   logPath,
+		SessionID: sessionID,
 	}, nil
 }
 
