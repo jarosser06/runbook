@@ -217,7 +217,7 @@ func TestLogRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWriter failed: %v", err)
 	}
-	writer1.Write([]byte("session 1 data"))
+	_, _ = writer1.Write([]byte("session 1 data"))
 	writer1.Close()
 
 	sessionID2 := GenerateSessionID()
@@ -232,7 +232,7 @@ func TestLogRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWriter failed: %v", err)
 	}
-	writer2.Write([]byte("session 2 data"))
+	_, _ = writer2.Write([]byte("session 2 data"))
 	writer2.Close()
 
 	// Verify both session directories exist

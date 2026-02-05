@@ -106,6 +106,12 @@ func (pm *Manager) Start(taskName string, sessionID string, cmd string, env map[
 	command.Stdout = logFile
 	command.Stderr = logFile
 
+	// Set process group attributes for proper daemon isolation
+	// This creates a new process group with the daemon as leader (PGID == PID)
+	// All children spawned by the daemon will inherit this PGID
+	// This allows us to terminate the entire process tree with kill(-pgid, signal)
+	command.SysProcAttr = getProcAttrs()
+
 	// Start the process
 	if err := command.Start(); err != nil {
 		logFile.Close()
@@ -178,18 +184,22 @@ func (pm *Manager) Stop(taskName string) error {
 		return fmt.Errorf("daemon '%s' is not running", taskName)
 	}
 
-	// Send SIGTERM
-	if err := proc.Cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		return fmt.Errorf("failed to send SIGTERM: %w", err)
+	// Send SIGTERM to entire process group
+	// The daemon's PID equals its PGID (because we set Setpgid=true)
+	// Negative PID means send to all processes in that process group
+	// This terminates the daemon AND all its children
+	if err := killProcessGroup(proc.PID, syscall.SIGTERM); err != nil {
+		return fmt.Errorf("failed to send SIGTERM to process group: %w", err)
 	}
 
 	// Wait for graceful shutdown (5 seconds)
 	// Wait on the done channel instead of calling Wait() again to avoid race
 	select {
 	case <-time.After(5 * time.Second):
-		// Graceful shutdown timeout, send SIGKILL
-		if err := proc.Cmd.Process.Kill(); err != nil {
-			return fmt.Errorf("failed to kill process: %w", err)
+		// Graceful shutdown timeout, send SIGKILL to entire process group
+		// This force-kills the daemon and all children that didn't exit gracefully
+		if err := killProcessGroup(proc.PID, syscall.SIGKILL); err != nil {
+			return fmt.Errorf("failed to kill process group: %w", err)
 		}
 		// Wait for monitoring goroutine to finish
 		<-proc.done

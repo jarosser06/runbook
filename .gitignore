@@ -37,3 +37,13 @@ dist/
 
 # Dev tools directory (logs, PIDs, etc.)
 ._dev_tools/
+
+# --- dex managed (do not edit) ---
+.dex/
+dex.lock
+CLAUDE.md
+.claude/skills/commit-messages/SKILL.md
+.claude/agents/cicd.md
+.mcp.json
+.claude/settings.json
+# --- end dex managed ---

@@ -3,6 +3,7 @@ package process
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -390,4 +391,199 @@ func TestIsProcessAlive(t *testing.T) {
 	if isProcessAlive(999999) {
 		t.Errorf("expected unlikely PID to not be alive")
 	}
+}
+
+// TestOrphanedProcesses verifies that child processes spawned by daemons
+// become orphaned when the daemon is stopped.
+//
+// This test PROVES the bug exists. The test is expected to FAIL until
+// the orphan process issue is fixed.
+//
+// Bug: When a daemon spawns child processes and the daemon is stopped,
+// the child processes are not terminated and become orphaned (adopted by init).
+func TestOrphanedProcesses(t *testing.T) {
+	// Skip on Windows - Unix-specific test
+	if os.Getenv("GOOS") == "windows" {
+		t.Skip("Unix-specific test")
+	}
+
+	// Setup
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	}()
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change directory: %v", err)
+	}
+
+	if err := logs.Setup(); err != nil {
+		t.Fatalf("failed to setup logs: %v", err)
+	}
+
+	manager := NewManager()
+	logPath := logs.GetLogPath("orphan-test")
+
+	// Start daemon that spawns child processes
+	// The child processes are backgrounded with & so they outlive the parent
+	cmd := `
+echo "Parent PID: $$"
+sleep 30 &
+CHILD1=$!
+sleep 30 &
+CHILD2=$!
+echo "Child PIDs: $CHILD1 $CHILD2"
+wait
+`
+
+	err = manager.Start("orphan-test", "test-session-id", cmd, nil, "", logPath)
+	if err != nil {
+		t.Fatalf("failed to start daemon: %v", err)
+	}
+
+	// Get daemon PID
+	info, err := manager.GetProcessInfo("orphan-test")
+	if err != nil {
+		t.Fatalf("failed to get process info: %v", err)
+	}
+	daemonPID := info.PID
+
+	// Wait for child processes to spawn
+	time.Sleep(500 * time.Millisecond)
+
+	// Find child process PIDs using ps
+	// Look for sleep processes that are children of our daemon
+	childPIDs := findChildProcesses(t, daemonPID)
+
+	if len(childPIDs) == 0 {
+		t.Fatal("expected to find child processes, but found none")
+	}
+
+	t.Logf("Daemon PID: %d, Child PIDs: %v", daemonPID, childPIDs)
+
+	// Verify child processes are running
+	for _, pid := range childPIDs {
+		if !isProcessAlive(pid) {
+			t.Errorf("expected child process %d to be alive before stop", pid)
+		}
+	}
+
+	// Stop the daemon
+	err = manager.Stop("orphan-test")
+	if err != nil {
+		t.Fatalf("failed to stop daemon: %v", err)
+	}
+
+	// Wait a bit for cleanup
+	time.Sleep(200 * time.Millisecond)
+
+	// Check if daemon process is gone
+	if isProcessAlive(daemonPID) {
+		t.Errorf("expected daemon process %d to be terminated", daemonPID)
+	}
+
+	// Check if child processes are still running (THE BUG)
+	orphanedPIDs := []int{}
+	for _, pid := range childPIDs {
+		if isProcessAlive(pid) {
+			orphanedPIDs = append(orphanedPIDs, pid)
+		}
+	}
+
+	// Clean up any orphaned processes before asserting
+	defer func() {
+		for _, pid := range orphanedPIDs {
+			// Force kill any remaining processes
+			_ = killProcess(pid)
+		}
+	}()
+
+	// THIS IS THE BUG: Child processes should be terminated but they're not
+	if len(orphanedPIDs) > 0 {
+		t.Errorf("BUG CONFIRMED: Found %d orphaned child process(es): %v",
+			len(orphanedPIDs), orphanedPIDs)
+		t.Errorf("Child processes should be terminated when daemon stops, but they were orphaned")
+
+		// Provide diagnostic information
+		for _, pid := range orphanedPIDs {
+			ppid := getParentPID(t, pid)
+			t.Logf("Orphaned process %d now has PPID: %d (1 = adopted by init)", pid, ppid)
+		}
+	}
+}
+
+// findChildProcesses returns PIDs of child processes of the given parent PID
+func findChildProcesses(t *testing.T, parentPID int) []int {
+	t.Helper()
+
+	// Use ps to find child processes
+	// Format: PID PPID COMMAND
+	output, err := execCommand("ps", "-eo", "pid,ppid,command")
+	if err != nil {
+		t.Fatalf("failed to run ps command: %v", err)
+	}
+
+	var childPIDs []int
+	lines := strings.Split(string(output), "\n")
+
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+
+		// Parse PID and PPID
+		var pid, ppid int
+		_, err1 := fmt.Sscanf(fields[0], "%d", &pid)
+		_, err2 := fmt.Sscanf(fields[1], "%d", &ppid)
+
+		if err1 != nil || err2 != nil {
+			continue
+		}
+
+		// Check if this is a child of our daemon and is a sleep process
+		if ppid == parentPID && strings.Contains(line, "sleep") {
+			childPIDs = append(childPIDs, pid)
+		}
+	}
+
+	return childPIDs
+}
+
+// getParentPID returns the parent PID of the given process
+func getParentPID(t *testing.T, pid int) int {
+	t.Helper()
+
+	output, err := execCommand("ps", "-o", "ppid=", "-p", fmt.Sprintf("%d", pid))
+	if err != nil {
+		t.Logf("failed to get parent PID for %d: %v", pid, err)
+		return -1
+	}
+
+	var ppid int
+	_, err = fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &ppid)
+	if err != nil {
+		t.Logf("failed to parse parent PID: %v", err)
+		return -1
+	}
+
+	return ppid
+}
+
+// execCommand is a helper to execute shell commands
+func execCommand(name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	return cmd.Output()
+}
+
+// killProcess forcefully terminates a process
+func killProcess(pid int) error {
+	cmd := exec.Command("kill", "-9", fmt.Sprintf("%d", pid))
+	return cmd.Run()
 }

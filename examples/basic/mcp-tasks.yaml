@@ -113,6 +113,30 @@ tasks:
         description: "Path to search in (default: current directory)"
         default: "."
 
+  orphan_test:
+    description: "Test daemon that spawns children to verify cleanup"
+    type: daemon
+    command: |
+      #!/bin/bash
+      echo "=== DAEMON STARTED ==="
+      echo "Daemon PID: $$"
+      echo "Daemon PGID: $(ps -o pgid= -p $$)"
+      echo "Daemon PPID: $PPID"
+
+      # Spawn multiple child processes
+      sleep 300 &
+      CHILD1=$!
+      sleep 300 &
+      CHILD2=$!
+
+      echo "Child PIDs: $CHILD1 $CHILD2"
+      echo "Child 1 PGID: $(ps -o pgid= -p $CHILD1)"
+      echo "Child 2 PGID: $(ps -o pgid= -p $CHILD2)"
+      echo "===================="
+
+      # Keep daemon running
+      wait
+
 task_groups:
   ci:
     description: "CI/CD pipeline"
