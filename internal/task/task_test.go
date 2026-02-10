@@ -11,7 +11,6 @@ import (
 	"github.com/jarosser06/dev-toolkit-mcp/internal/logs"
 )
 
-// Mock ProcessManager for testing
 type MockProcessManager struct {
 	processes map[string]*mockProcess
 }
@@ -20,6 +19,7 @@ type mockProcess struct {
 	pid       int
 	running   bool
 	sessionID string
+	command   string
 }
 
 func NewMockProcessManager() *MockProcessManager {
@@ -36,8 +36,16 @@ func (m *MockProcessManager) Start(taskName string, sessionID string, cmd string
 		pid:       12345,
 		running:   true,
 		sessionID: sessionID,
+		command:   cmd,
 	}
 	return nil
+}
+
+func (m *MockProcessManager) GetCommand(taskName string) (string, error) {
+	if proc, exists := m.processes[taskName]; exists {
+		return proc.command, nil
+	}
+	return "", fmt.Errorf("process not found")
 }
 
 func (m *MockProcessManager) Stop(taskName string) error {
@@ -564,5 +572,168 @@ func TestExecutionResultTiming(t *testing.T) {
 
 	if result.Duration < 100*time.Millisecond {
 		t.Errorf("expected duration >= 100ms, got %v", result.Duration)
+	}
+}
+
+func TestDaemonParameterSubstitution(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	}()
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change directory: %v", err)
+	}
+
+	if err := logs.Setup(); err != nil {
+		t.Fatalf("failed to setup logs: %v", err)
+	}
+
+	manifest := &config.Manifest{
+		Version: "1.0",
+		Tasks: map[string]config.Task{
+			"daemon": {
+				Description: "Daemon with parameters",
+				Command:     "echo {{.port}}",
+				Type:        config.TaskTypeDaemon,
+			},
+		},
+	}
+
+	mockPM := NewMockProcessManager()
+	manager := NewManager(manifest, mockPM)
+
+	params := map[string]interface{}{"port": "8080"}
+	_, err = manager.StartDaemon("daemon", params)
+	if err != nil {
+		t.Fatalf("failed to start daemon: %v", err)
+	}
+
+	cmd, err := mockPM.GetCommand("daemon")
+	if err != nil {
+		t.Fatalf("failed to get command: %v", err)
+	}
+
+	expected := "echo 8080"
+	if cmd != expected {
+		t.Errorf("expected command %q, got %q", expected, cmd)
+	}
+}
+
+func TestApplyDefaultsWithEmptyString(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	}()
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change directory: %v", err)
+	}
+
+	if err := logs.Setup(); err != nil {
+		t.Fatalf("failed to setup logs: %v", err)
+	}
+
+	emptyString := ""
+	manifest := &config.Manifest{
+		Version: "1.0",
+		Tasks: map[string]config.Task{
+			"test": {
+				Description: "Task with empty string default",
+				Command:     "echo 'port:[{{.port}}]'",
+				Type:        config.TaskTypeOneShot,
+				Parameters: map[string]config.Param{
+					"port": {
+						Type:        "string",
+						Description: "Port number",
+						Default:     &emptyString,
+					},
+				},
+			},
+		},
+	}
+
+	executor := NewExecutor(manifest)
+	result, err := executor.Execute("test", map[string]interface{}{})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !result.Success {
+		t.Errorf("expected success, got failure: %s", result.Error)
+	}
+
+	expected := "port:[]\n"
+	if result.Stdout != expected {
+		t.Errorf("expected stdout to be %q (empty string applied), got: %q", expected, result.Stdout)
+	}
+}
+
+func TestApplyDefaultsWithValue(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	}()
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change directory: %v", err)
+	}
+
+	if err := logs.Setup(); err != nil {
+		t.Fatalf("failed to setup logs: %v", err)
+	}
+
+	defaultValue := "8080"
+	manifest := &config.Manifest{
+		Version: "1.0",
+		Tasks: map[string]config.Task{
+			"test": {
+				Description: "Task with default value",
+				Command:     "echo 'port:[{{.port}}]'",
+				Type:        config.TaskTypeOneShot,
+				Parameters: map[string]config.Param{
+					"port": {
+						Type:        "string",
+						Description: "Port number",
+						Default:     &defaultValue,
+					},
+				},
+			},
+		},
+	}
+
+	executor := NewExecutor(manifest)
+	result, err := executor.Execute("test", map[string]interface{}{})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !result.Success {
+		t.Errorf("expected success, got failure: %s", result.Error)
+	}
+
+	expected := "port:[8080]\n"
+	if result.Stdout != expected {
+		t.Errorf("expected stdout to be %q (default value applied), got: %q", expected, result.Stdout)
 	}
 }

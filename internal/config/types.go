@@ -35,10 +35,10 @@ type Task struct {
 
 // Param represents a task parameter definition
 type Param struct {
-	Type        string `yaml:"type"`
-	Required    bool   `yaml:"required"`
-	Description string `yaml:"description"`
-	Default     string `yaml:"default"`
+	Type        string  `yaml:"type"`
+	Required    bool    `yaml:"required"`
+	Description string  `yaml:"description"`
+	Default     *string `yaml:"default"`
 }
 
 // TaskGroup represents a collection of related tasks

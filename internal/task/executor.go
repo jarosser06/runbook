@@ -38,8 +38,8 @@ func (e *Executor) applyDefaults(task config.Task, params map[string]interface{}
 
 	// Apply defaults for missing parameters
 	for paramName, paramDef := range task.Parameters {
-		if _, exists := result[paramName]; !exists && paramDef.Default != "" {
-			result[paramName] = paramDef.Default
+		if _, exists := result[paramName]; !exists && paramDef.Default != nil {
+			result[paramName] = *paramDef.Default
 		}
 	}
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/jarosser06/dev-toolkit-mcp/internal/config"
 	"github.com/jarosser06/dev-toolkit-mcp/internal/logs"
+	"github.com/jarosser06/dev-toolkit-mcp/internal/template"
 )
 
 // ProcessManager interface for daemon operations
@@ -72,14 +73,21 @@ func (m *Manager) StartDaemon(taskName string, params map[string]interface{}) (*
 		}, nil
 	}
 
-	// Generate session ID
+	params = m.applyDefaults(task, params)
+
+	command, err := template.SubstituteParameters(task.Command, params)
+	if err != nil {
+		return &DaemonStartResult{
+			Success: false,
+			Error:   fmt.Sprintf("failed to substitute parameters: %v", err),
+		}, nil
+	}
+
 	sessionID := logs.GenerateSessionID()
 
-	// Get log path (session-based)
 	logPath := logs.GetSessionLogPath(sessionID)
 
-	// Start daemon
-	if err := m.processManager.Start(taskName, sessionID, task.Command, task.Env, task.CWD, logPath); err != nil {
+	if err := m.processManager.Start(taskName, sessionID, command, task.Env, task.CWD, logPath); err != nil {
 		return &DaemonStartResult{
 			Success: false,
 			Error:   fmt.Sprintf("failed to start daemon: %v", err),
@@ -193,4 +201,20 @@ func (m *Manager) DaemonStatus(taskName string) (*DaemonStatus, error) {
 // GetManifest returns the manifest
 func (m *Manager) GetManifest() *config.Manifest {
 	return m.manifest
+}
+
+func (m *Manager) applyDefaults(task config.Task, params map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+
+	for k, v := range params {
+		result[k] = v
+	}
+
+	for paramName, paramDef := range task.Parameters {
+		if _, exists := result[paramName]; !exists && paramDef.Default != nil {
+			result[paramName] = *paramDef.Default
+		}
+	}
+
+	return result
 }
