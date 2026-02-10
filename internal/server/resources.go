@@ -381,7 +381,7 @@ Currently, only "1.0" is supported.
 defaults:
   timeout: 300        # Default timeout in seconds
   shell: "/bin/bash"  # Default shell for command execution
-  cwd: "."           # Default working directory
+  working_directory: "."           # Default working directory
   env:               # Default environment variables
     NODE_ENV: "development"
 ` + "```" + `
@@ -408,7 +408,7 @@ tasks:
     type: oneshot
     timeout: 300
     shell: "/bin/bash"
-    cwd: "."
+    working_directory: "."
     env:
       GO_ENV: "test"
 ` + "```" + `
@@ -423,7 +423,7 @@ tasks:
     description: "Start development server"
     command: "npm run dev"
     type: daemon
-    cwd: "./frontend"
+    working_directory: "./frontend"
     env:
       NODE_ENV: "development"
       PORT: "3000"
@@ -444,7 +444,8 @@ tasks:
 | type | Yes | string | Either "oneshot" or "daemon" |
 | timeout | No | int | Timeout in seconds (default: from defaults or 300) |
 | shell | No | string | Shell to use (default: from defaults or /bin/bash) |
-| cwd | No | string | Working directory (default: from defaults or .) |
+| working_directory | No | string | Working directory (default: from defaults or .) |
+| expose_working_directory | No | bool | If true, adds a working_directory parameter to the MCP tool |
 | env | No | map | Environment variables to set |
 | parameters | No | map | Parameter definitions (see Parameters section) |
 | depends_on | No | []string | List of task names this task depends on |
@@ -503,6 +504,33 @@ tasks:
 | required | Yes | bool | Whether parameter is required |
 | description | Yes | string | Human-readable description |
 | default | No | string | Default value for optional parameters |
+
+### Dynamic Working Directory
+
+Tasks can expose their working directory as a runtime parameter, allowing it to be overridden when the tool is called:
+
+` + "```yaml" + `
+tasks:
+  test:
+    description: "Run tests with configurable working directory"
+    command: "pytest {{.test_path}}"
+    working_directory: "."
+    expose_working_directory: true
+    parameters:
+      test_path:
+        type: string
+        required: true
+        description: "Path to test file or directory"
+` + "```" + `
+
+When ` + "`expose_working_directory: true`" + ` is set, the generated MCP tool will include a ` + "`working_directory`" + ` parameter:
+
+**Resolution Priority:**
+1. If ` + "`expose_working_directory: true`" + ` AND parameter provided → use parameter value
+2. Otherwise → use static ` + "`working_directory`" + ` field value
+3. Empty string parameters are treated as "not provided" (fallback to static value)
+
+This enables flexible task execution where the working directory can be determined dynamically based on context, while maintaining a sensible default.
 
 ## Task Groups
 
@@ -563,7 +591,7 @@ tasks:
     description: "Start development server"
     command: "npm run dev"
     type: daemon
-    cwd: "./frontend"
+    working_directory: "./frontend"
     env:
       NODE_ENV: "development"
       PORT: "3000"
@@ -579,7 +607,7 @@ tasks:
     description: "Run frontend tests"
     command: "npm test"
     type: oneshot
-    cwd: "./frontend"
+    working_directory: "./frontend"
 
   # Building
   build:

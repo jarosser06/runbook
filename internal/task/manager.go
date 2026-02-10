@@ -87,7 +87,8 @@ func (m *Manager) StartDaemon(taskName string, params map[string]interface{}) (*
 
 	logPath := logs.GetSessionLogPath(sessionID)
 
-	if err := m.processManager.Start(taskName, sessionID, command, task.Env, task.CWD, logPath); err != nil {
+	workingDir := resolveWorkingDirectory(task, params)
+	if err := m.processManager.Start(taskName, sessionID, command, task.Env, workingDir, logPath); err != nil {
 		return &DaemonStartResult{
 			Success: false,
 			Error:   fmt.Sprintf("failed to start daemon: %v", err),

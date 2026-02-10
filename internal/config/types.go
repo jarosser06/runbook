@@ -22,15 +22,16 @@ type Manifest struct {
 
 // Task represents a single executable task
 type Task struct {
-	Description string            `yaml:"description"`
-	Command     string            `yaml:"command"`
-	Type        TaskType          `yaml:"type"`
-	CWD         string            `yaml:"cwd"`
-	Env         map[string]string `yaml:"env"`
-	Timeout     int               `yaml:"timeout"`
-	Shell       string            `yaml:"shell"`
-	Parameters  map[string]Param  `yaml:"parameters"`
-	DependsOn   []string          `yaml:"depends_on"`
+	Description            string            `yaml:"description"`
+	Command                string            `yaml:"command"`
+	Type                   TaskType          `yaml:"type"`
+	WorkingDirectory       string            `yaml:"working_directory"`
+	ExposeWorkingDirectory bool              `yaml:"expose_working_directory"`
+	Env                    map[string]string `yaml:"env"`
+	Timeout                int               `yaml:"timeout"`
+	Shell                  string            `yaml:"shell"`
+	Parameters             map[string]Param  `yaml:"parameters"`
+	DependsOn              []string          `yaml:"depends_on"`
 }
 
 // Param represents a task parameter definition

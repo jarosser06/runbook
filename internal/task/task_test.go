@@ -12,7 +12,8 @@ import (
 )
 
 type MockProcessManager struct {
-	processes map[string]*mockProcess
+	processes   map[string]*mockProcess
+	capturedCwd string
 }
 
 type mockProcess struct {
@@ -32,6 +33,7 @@ func (m *MockProcessManager) Start(taskName string, sessionID string, cmd string
 	if _, exists := m.processes[taskName]; exists && m.processes[taskName].running {
 		return fmt.Errorf("process already running")
 	}
+	m.capturedCwd = cwd
 	m.processes[taskName] = &mockProcess{
 		pid:       12345,
 		running:   true,
@@ -735,5 +737,240 @@ func TestApplyDefaultsWithValue(t *testing.T) {
 	expected := "port:[8080]\n"
 	if result.Stdout != expected {
 		t.Errorf("expected stdout to be %q (default value applied), got: %q", expected, result.Stdout)
+	}
+}
+
+func TestWorkingDirectoryResolution(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	}()
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change directory: %v", err)
+	}
+
+	if err := logs.Setup(); err != nil {
+		t.Fatalf("failed to setup logs: %v", err)
+	}
+
+	// Create subdirectories for testing
+	subDir1 := tmpDir + "/subdir1"
+	subDir2 := tmpDir + "/subdir2"
+	if err := os.MkdirAll(subDir1, 0755); err != nil {
+		t.Fatalf("failed to create subdir1: %v", err)
+	}
+	if err := os.MkdirAll(subDir2, 0755); err != nil {
+		t.Fatalf("failed to create subdir2: %v", err)
+	}
+
+	tests := []struct {
+		name                     string
+		taskWorkingDirectory     string
+		exposeWorkingDirectory   bool
+		providedParameter        interface{}
+		expectedWorkingDirectory string
+	}{
+		{
+			name:                     "static working_directory only",
+			taskWorkingDirectory:     subDir1,
+			exposeWorkingDirectory:   false,
+			providedParameter:        nil,
+			expectedWorkingDirectory: subDir1,
+		},
+		{
+			name:                     "exposed with parameter provided",
+			taskWorkingDirectory:     subDir1,
+			exposeWorkingDirectory:   true,
+			providedParameter:        subDir2,
+			expectedWorkingDirectory: subDir2,
+		},
+		{
+			name:                     "exposed without parameter",
+			taskWorkingDirectory:     subDir1,
+			exposeWorkingDirectory:   true,
+			providedParameter:        nil,
+			expectedWorkingDirectory: subDir1,
+		},
+		{
+			name:                     "exposed with empty string",
+			taskWorkingDirectory:     subDir1,
+			exposeWorkingDirectory:   true,
+			providedParameter:        "",
+			expectedWorkingDirectory: subDir1,
+		},
+		{
+			name:                     "not exposed, parameter provided",
+			taskWorkingDirectory:     subDir1,
+			exposeWorkingDirectory:   false,
+			providedParameter:        subDir2,
+			expectedWorkingDirectory: subDir1,
+		},
+		{
+			name:                     "parameter type validation - non-string",
+			taskWorkingDirectory:     subDir1,
+			exposeWorkingDirectory:   true,
+			providedParameter:        12345,
+			expectedWorkingDirectory: subDir1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifest := &config.Manifest{
+				Version: "1.0",
+				Tasks: map[string]config.Task{
+					"test": {
+						Description:            "Test working directory",
+						Command:                "pwd",
+						Type:                   config.TaskTypeOneShot,
+						WorkingDirectory:       tt.taskWorkingDirectory,
+						ExposeWorkingDirectory: tt.exposeWorkingDirectory,
+					},
+				},
+			}
+
+			executor := NewExecutor(manifest)
+			params := map[string]interface{}{}
+			if tt.providedParameter != nil {
+				params["working_directory"] = tt.providedParameter
+			}
+
+			result, err := executor.Execute("test", params)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if !result.Success {
+				t.Errorf("expected success, got failure: %s", result.Error)
+			}
+
+			// Verify the command ran in the expected directory
+			// Note: macOS may resolve paths differently (e.g., /private prefix)
+			// so we use filepath.EvalSymlinks to normalize both paths
+			actualDir := strings.TrimSpace(result.Stdout)
+
+			// Resolve both paths to handle symlink differences
+			expectedResolved, err := os.Readlink(tt.expectedWorkingDirectory)
+			if err != nil {
+				expectedResolved = tt.expectedWorkingDirectory
+			}
+			actualResolved, err := os.Readlink(actualDir)
+			if err != nil {
+				actualResolved = actualDir
+			}
+
+			// Compare the resolved paths or fall back to direct comparison
+			// if they match after resolution
+			if actualResolved != expectedResolved && actualDir != tt.expectedWorkingDirectory {
+				// One final check - see if they're the same inode
+				expectedStat, err1 := os.Stat(tt.expectedWorkingDirectory)
+				actualStat, err2 := os.Stat(actualDir)
+				if err1 == nil && err2 == nil && os.SameFile(expectedStat, actualStat) {
+					// Same file, test passes
+					return
+				}
+				t.Errorf("expected working directory %q, got %q", tt.expectedWorkingDirectory, actualDir)
+			}
+		})
+	}
+}
+
+func TestWorkingDirectoryResolutionDaemon(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	}()
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change directory: %v", err)
+	}
+
+	if err := logs.Setup(); err != nil {
+		t.Fatalf("failed to setup logs: %v", err)
+	}
+
+	subDir1 := tmpDir + "/subdir1"
+	subDir2 := tmpDir + "/subdir2"
+	if err := os.MkdirAll(subDir1, 0755); err != nil {
+		t.Fatalf("failed to create subdir1: %v", err)
+	}
+	if err := os.MkdirAll(subDir2, 0755); err != nil {
+		t.Fatalf("failed to create subdir2: %v", err)
+	}
+
+	tests := []struct {
+		name                     string
+		taskWorkingDirectory     string
+		exposeWorkingDirectory   bool
+		providedParameter        interface{}
+		expectedWorkingDirectory string
+	}{
+		{
+			name:                     "daemon - static working_directory",
+			taskWorkingDirectory:     subDir1,
+			exposeWorkingDirectory:   false,
+			providedParameter:        nil,
+			expectedWorkingDirectory: subDir1,
+		},
+		{
+			name:                     "daemon - exposed with parameter",
+			taskWorkingDirectory:     subDir1,
+			exposeWorkingDirectory:   true,
+			providedParameter:        subDir2,
+			expectedWorkingDirectory: subDir2,
+		},
+		{
+			name:                     "daemon - exposed without parameter",
+			taskWorkingDirectory:     subDir1,
+			exposeWorkingDirectory:   true,
+			providedParameter:        nil,
+			expectedWorkingDirectory: subDir1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifest := &config.Manifest{
+				Version: "1.0",
+				Tasks: map[string]config.Task{
+					"daemon": {
+						Description:            "Daemon with working directory",
+						Command:                "sleep 100",
+						Type:                   config.TaskTypeDaemon,
+						WorkingDirectory:       tt.taskWorkingDirectory,
+						ExposeWorkingDirectory: tt.exposeWorkingDirectory,
+					},
+				},
+			}
+
+			mockPM := NewMockProcessManager()
+			manager := NewManager(manifest, mockPM)
+			params := map[string]interface{}{}
+			if tt.providedParameter != nil {
+				params["working_directory"] = tt.providedParameter
+			}
+
+			_, err := manager.StartDaemon("daemon", params)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if mockPM.capturedCwd != tt.expectedWorkingDirectory {
+				t.Errorf("expected working directory %q passed to process manager, got %q", tt.expectedWorkingDirectory, mockPM.capturedCwd)
+			}
+		})
 	}
 }

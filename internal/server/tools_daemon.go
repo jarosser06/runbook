@@ -21,10 +21,36 @@ func (s *Server) registerDaemonTools(taskName string, task config.Task) {
 func (s *Server) registerDaemonStartTool(taskName string, task config.Task) {
 	toolName := "start_" + taskName
 
+	// Build input schema with task parameters
+	inputSchema := mcp.ToolInputSchema{
+		Type:       "object",
+		Properties: make(map[string]interface{}),
+		Required:   []string{},
+	}
+
+	for paramName, param := range task.Parameters {
+		paramSchema := map[string]interface{}{
+			"type":        param.Type,
+			"description": param.Description,
+		}
+		inputSchema.Properties[paramName] = paramSchema
+		if param.Required {
+			inputSchema.Required = append(inputSchema.Required, paramName)
+		}
+	}
+
+	// Add working_directory parameter if exposed
+	if task.ExposeWorkingDirectory {
+		inputSchema.Properties["working_directory"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Working directory for command execution (overrides static value)",
+		}
+	}
+
 	tool := mcp.Tool{
 		Name:        toolName,
 		Description: fmt.Sprintf("Start daemon: %s", task.Description),
-		InputSchema: mcp.ToolInputSchema{Type: "object", Properties: make(map[string]interface{})},
+		InputSchema: inputSchema,
 	}
 
 	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

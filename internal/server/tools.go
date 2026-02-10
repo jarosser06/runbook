@@ -47,6 +47,14 @@ func (s *Server) registerOneShotTool(taskName string, task config.Task) {
 		}
 	}
 
+	// Add working_directory parameter if exposed
+	if task.ExposeWorkingDirectory {
+		inputSchema.Properties["working_directory"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Working directory for command execution (overrides static value)",
+		}
+	}
+
 	tool := mcp.Tool{
 		Name:        toolName,
 		Description: task.Description,

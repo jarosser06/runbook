@@ -25,6 +25,17 @@ func NewExecutor(manifest *config.Manifest) *Executor {
 	}
 }
 
+// resolveWorkingDirectory determines the working directory for a task
+// Priority: 1) parameter if exposed and provided, 2) static task field
+func resolveWorkingDirectory(task config.Task, params map[string]interface{}) string {
+	if task.ExposeWorkingDirectory {
+		if wd, ok := params["working_directory"].(string); ok && wd != "" {
+			return wd
+		}
+	}
+	return task.WorkingDirectory
+}
+
 // applyDefaults merges default parameter values into the provided params map
 // Returns a new map with defaults applied for missing parameters
 func (e *Executor) applyDefaults(task config.Task, params map[string]interface{}) map[string]interface{} {
@@ -87,8 +98,9 @@ func (e *Executor) Execute(taskName string, params map[string]interface{}) (*Exe
 	cmd := exec.Command(shell, "-c", command)
 
 	// Set working directory
-	if task.CWD != "" {
-		cmd.Dir = task.CWD
+	workingDir := resolveWorkingDirectory(task, params)
+	if workingDir != "" {
+		cmd.Dir = workingDir
 	}
 
 	// Set environment variables
@@ -104,8 +116,8 @@ func (e *Executor) Execute(taskName string, params map[string]interface{}) (*Exe
 
 	// Get current working directory for metadata
 	cwd, _ := os.Getwd()
-	if task.CWD != "" {
-		cwd = task.CWD
+	if workingDir != "" {
+		cwd = workingDir
 	}
 
 	// Create session metadata
