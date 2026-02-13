@@ -47,13 +47,13 @@ func (s *Server) registerBuiltInTools() {
 func (s *Server) registerInitTool() {
 	tool := mcp.Tool{
 		Name:        "init",
-		Description: "Initialize a new mcp-tasks.yaml configuration file",
+		Description: "Initialize a new .dev_workflow.yaml configuration file",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
 				"path": map[string]interface{}{
 					"type":        "string",
-					"description": "Target path for config file (default: ./mcp-tasks.yaml)",
+					"description": "Target path for config file (default: ./.dev_workflow.yaml)",
 				},
 				"overwrite": map[string]interface{}{
 					"type":        "boolean",
@@ -66,8 +66,8 @@ func (s *Server) registerInitTool() {
 	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := req.GetArguments()
 
-		// Get path parameter (default to ./mcp-tasks.yaml)
-		targetPath := "./mcp-tasks.yaml"
+		// Get path parameter (default to ./.dev_workflow.yaml)
+		targetPath := "./.dev_workflow.yaml"
 		if path, ok := args["path"].(string); ok && path != "" {
 			targetPath = path
 		}

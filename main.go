@@ -7,11 +7,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/jarosser06/dev-toolkit-mcp/internal/config"
-	"github.com/jarosser06/dev-toolkit-mcp/internal/logs"
-	"github.com/jarosser06/dev-toolkit-mcp/internal/process"
-	"github.com/jarosser06/dev-toolkit-mcp/internal/server"
-	"github.com/jarosser06/dev-toolkit-mcp/internal/task"
+	"github.com/jarosser06/dev-workflow-mcp/internal/config"
+	"github.com/jarosser06/dev-workflow-mcp/internal/logs"
+	"github.com/jarosser06/dev-workflow-mcp/internal/process"
+	"github.com/jarosser06/dev-workflow-mcp/internal/server"
+	"github.com/jarosser06/dev-workflow-mcp/internal/task"
 )
 
 var (
@@ -23,8 +23,10 @@ var (
 
 func main() {
 	// Parse command-line flags
-	configPath := flag.String("config", "", "Path to task manifest file")
+	configPath := flag.String("config", "", "Path to task manifest file or directory")
 	initFlag := flag.Bool("init", false, "Initialize configuration file")
+	serveFlag := flag.Bool("serve", false, "Run as standalone HTTP server")
+	addrFlag := flag.String("addr", ":8080", "Listen address for HTTP mode")
 	flag.Parse()
 
 	// Handle init flag - create config file and exit
@@ -49,7 +51,7 @@ func main() {
 	// Print warning if no config was found
 	if !loaded {
 		fmt.Fprintln(os.Stderr, "Warning: No config file found. Server starting with empty configuration.")
-		fmt.Fprintln(os.Stderr, "Use the 'init' tool to create mcp-tasks.yaml")
+		fmt.Fprintln(os.Stderr, "Create .dev_workflow.yaml or .dev_workflow/ directory, or use -config flag")
 	}
 
 	// Create process manager
@@ -58,27 +60,33 @@ func main() {
 	// Create task manager
 	taskManager := task.NewManager(manifest, processManager)
 
-	// Create MCP server (pass loaded flag so init tool is only available when needed)
-	mcpServer := server.NewServer(manifest, taskManager, loaded, version)
+	// Create MCP server
+	mcpServer := server.NewServer(manifest, taskManager, processManager, loaded, version, *configPath)
 
-	// Setup signal handling for graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-sigChan
-		fmt.Fprintln(os.Stderr, "\nShutting down...")
-		// Stop all running daemons
-		if err := processManager.StopAll(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error stopping daemons: %v\n", err)
+	if *serveFlag {
+		// HTTP mode — signal handling is done inside ServeHTTP
+		if err := mcpServer.ServeHTTP(*addrFlag); err != nil {
+			fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+			os.Exit(1)
 		}
-		os.Exit(0)
-	}()
+	} else {
+		// Stdio mode — setup signal handling for graceful shutdown
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	// Start server
-	if err := mcpServer.Serve(); err != nil {
-		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
-		os.Exit(1)
+		go func() {
+			<-sigChan
+			fmt.Fprintln(os.Stderr, "\nShutting down...")
+			if err := processManager.StopAll(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error stopping daemons: %v\n", err)
+			}
+			os.Exit(0)
+		}()
+
+		if err := mcpServer.Serve(); err != nil {
+			fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
 
@@ -113,7 +121,7 @@ task_groups:
 
 // handleInit creates a minimal config file
 func handleInit() {
-	targetPath := "./mcp-tasks.yaml"
+	targetPath := "./.dev_workflow.yaml"
 
 	// Check if file already exists
 	if _, err := os.Stat(targetPath); err == nil {

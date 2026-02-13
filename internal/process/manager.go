@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jarosser06/dev-toolkit-mcp/internal/logs"
+	"github.com/jarosser06/dev-workflow-mcp/internal/logs"
 )
 
 // ProcessInfo holds information about a running process

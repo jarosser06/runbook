@@ -38,6 +38,11 @@ func parseManifestWithImports(path string, visited map[string]bool) (*Manifest, 
 		return nil, nil, fmt.Errorf("failed to parse YAML from %s: %w", path, err)
 	}
 
+	// Resolve file-based resources relative to this YAML file's directory
+	if err := resolveResourceFiles(&manifest, filepath.Dir(absPath)); err != nil {
+		return nil, nil, fmt.Errorf("failed to resolve resource files in %s: %w", path, err)
+	}
+
 	// If no imports, return just this manifest
 	if len(manifest.Imports) == 0 {
 		return &manifest, nil, nil
@@ -143,6 +148,31 @@ func ParseManifest(path string) (*Manifest, error) {
 	applyDefaults(manifest)
 
 	return manifest, nil
+}
+
+// resolveResourceFiles reads file-based resources and populates their Content field.
+// File paths are resolved relative to the given base directory (the YAML file's dir).
+func resolveResourceFiles(manifest *Manifest, baseDir string) error {
+	for name, resource := range manifest.Resources {
+		if resource.File == "" {
+			continue
+		}
+
+		filePath := resource.File
+		if !filepath.IsAbs(filePath) {
+			filePath = filepath.Join(baseDir, filePath)
+		}
+
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("resource '%s': failed to read file %s: %w", name, filePath, err)
+		}
+
+		resource.Content = string(data)
+		resource.File = ""
+		manifest.Resources[name] = resource
+	}
+	return nil
 }
 
 // applyDefaults merges manifest-level defaults with task-specific values

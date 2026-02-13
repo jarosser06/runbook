@@ -5,10 +5,10 @@ all: lint test build
 
 # Build binary to bin/
 build:
-	@echo "Building dev-toolkit-mcp..."
+	@echo "Building dev-workflow-mcp..."
 	@mkdir -p bin
-	go build -o bin/dev-toolkit-mcp main.go
-	@echo "Built: bin/dev-toolkit-mcp"
+	go build -o bin/dev-workflow-mcp main.go
+	@echo "Built: bin/dev-workflow-mcp"
 
 # Run tests with race detection and coverage
 test:
@@ -40,9 +40,9 @@ deps:
 install: build
 	@echo "Installing binary..."
 	@mkdir -p $(HOME)/.bin
-	cp bin/dev-toolkit-mcp $(HOME)/.bin/
-	@echo "Installed to $(HOME)/.bin/dev-toolkit-mcp"
+	cp bin/dev-workflow-mcp $(HOME)/.bin/
+	@echo "Installed to $(HOME)/.bin/dev-workflow-mcp"
 
 # Run the server (for testing)
 run: build
-	./bin/dev-toolkit-mcp
+	./bin/dev-workflow-mcp

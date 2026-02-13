@@ -15,9 +15,10 @@ func mergeManifests(base *Manifest, imports []*Manifest) (*Manifest, error) {
 		Tasks:      make(map[string]Task),
 		TaskGroups: make(map[string]TaskGroup),
 		Prompts:    make(map[string]Prompt),
+		Resources:  make(map[string]Resource),
 	}
 
-	// Start with base manifest tasks, groups, and prompts
+	// Start with base manifest tasks, groups, prompts, and resources
 	if err := mergeTasks(result.Tasks, base.Tasks); err != nil {
 		return nil, err
 	}
@@ -25,6 +26,9 @@ func mergeManifests(base *Manifest, imports []*Manifest) (*Manifest, error) {
 		return nil, err
 	}
 	if err := mergePrompts(result.Prompts, base.Prompts); err != nil {
+		return nil, err
+	}
+	if err := mergeResources(result.Resources, base.Resources); err != nil {
 		return nil, err
 	}
 
@@ -37,6 +41,9 @@ func mergeManifests(base *Manifest, imports []*Manifest) (*Manifest, error) {
 			return nil, err
 		}
 		if err := mergePrompts(result.Prompts, imported.Prompts); err != nil {
+			return nil, err
+		}
+		if err := mergeResources(result.Resources, imported.Resources); err != nil {
 			return nil, err
 		}
 	}
@@ -76,6 +83,18 @@ func mergePrompts(dst, src map[string]Prompt) error {
 			return fmt.Errorf("duplicate prompt name '%s' found during merge", name)
 		}
 		dst[name] = prompt
+	}
+	return nil
+}
+
+// mergeResources merges source resources into destination
+// Returns error if duplicate resource names are found
+func mergeResources(dst, src map[string]Resource) error {
+	for name, resource := range src {
+		if _, exists := dst[name]; exists {
+			return fmt.Errorf("duplicate resource name '%s' found during merge", name)
+		}
+		dst[name] = resource
 	}
 	return nil
 }

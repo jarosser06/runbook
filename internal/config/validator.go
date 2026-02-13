@@ -46,6 +46,13 @@ func Validate(manifest *Manifest) error {
 		}
 	}
 
+	// Validate resources
+	for resourceName, resource := range manifest.Resources {
+		if err := validateResource(resourceName, resource); err != nil {
+			errors = append(errors, err.Error())
+		}
+	}
+
 	if len(errors) > 0 {
 		return fmt.Errorf("validation errors:\n  - %s", strings.Join(errors, "\n  - "))
 	}
@@ -128,6 +135,28 @@ func validatePrompt(name string, prompt Prompt) error {
 
 	if prompt.Content == "" {
 		errors = append(errors, fmt.Sprintf("prompt '%s': content is required", name))
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("%s", strings.Join(errors, "; "))
+	}
+
+	return nil
+}
+
+func validateResource(name string, resource Resource) error {
+	var errors []string
+
+	if resource.Description == "" {
+		errors = append(errors, fmt.Sprintf("resource '%s': description is required", name))
+	}
+
+	if resource.Content == "" && resource.File == "" {
+		errors = append(errors, fmt.Sprintf("resource '%s': either content or file is required", name))
+	}
+
+	if resource.Content != "" && resource.File != "" {
+		errors = append(errors, fmt.Sprintf("resource '%s': content and file are mutually exclusive", name))
 	}
 
 	if len(errors) > 0 {

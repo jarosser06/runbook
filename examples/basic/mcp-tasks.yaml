@@ -7,7 +7,7 @@ defaults:
 tasks:
   build:
     description: "Build the project"
-    command: "mkdir -p bin && go build -o bin/dev-toolkit-mcp main.go"
+    command: "mkdir -p bin && go build -o bin/dev-workflow-mcp main.go"
     type: oneshot
 
   test:
@@ -156,7 +156,7 @@ prompts:
   dev_setup:
     description: "Guide for setting up development environment"
     content: |
-      # Dev Toolkit MCP - Development Setup
+      # Dev Workflow MCP - Development Setup
 
       ## Initial Setup
       1. Install dependencies: {{.Tasks.install.Run}}

@@ -1,4 +1,4 @@
-module github.com/jarosser06/dev-toolkit-mcp
+module github.com/jarosser06/dev-workflow-mcp
 
 go 1.23.0
 

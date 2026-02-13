@@ -17,6 +17,7 @@ type Manifest struct {
 	Tasks      map[string]Task        `yaml:"tasks"`
 	TaskGroups map[string]TaskGroup   `yaml:"task_groups"`
 	Prompts    map[string]Prompt      `yaml:"prompts"`
+	Resources  map[string]Resource    `yaml:"resources"`
 	Defaults   Defaults               `yaml:"defaults"`
 }
 
@@ -53,6 +54,14 @@ type Prompt struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
 	Content     string `yaml:"content"`
+}
+
+// Resource represents a custom MCP resource with either inline or file-based content
+type Resource struct {
+	Description string `yaml:"description"`
+	Content     string `yaml:"content"`
+	File        string `yaml:"file"`
+	MIMEType    string `yaml:"mime_type"`
 }
 
 // Defaults represents default values for task configuration

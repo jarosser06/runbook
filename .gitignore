@@ -46,4 +46,19 @@ CLAUDE.md
 .claude/agents/cicd.md
 .mcp.json
 .claude/settings.json
+.claude/skills/code-review/SKILL.md
+.claude/skills/code-review/resources/review-dimensions.md
+.claude/skills/code-review/resources/severity-levels.md
+.claude/skills/code-review/resources/language-detection.md
+.claude/skills/code-review/resources/feedback-patterns.md
+.claude/skills/software-engineering/SKILL.md
+.claude/skills/software-engineering/resources/dry-principle.md
+.claude/skills/software-engineering/resources/solid-principles.md
+.claude/skills/software-engineering/resources/module-organization.md
+.claude/skills/software-engineering/resources/abstraction-patterns.md
+.claude/skills/software-engineering/resources/refactoring-strategies.md
+.claude/agents/code-reviewer.md
+.claude/rules/review-standards/review-standards.md
 # --- end dex managed ---
+
+server.pid

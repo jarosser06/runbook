@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/jarosser06/dev-workflow-mcp/internal/template"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -13,7 +14,7 @@ func (s *Server) registerResources() {
 	// Register task-groups resource
 	s.mcpServer.AddResource(
 		mcp.NewResource(
-			"devtoolkit://task-groups",
+			"dev-workflow://task-groups",
 			"Task Groups",
 			mcp.WithResourceDescription("List of all task groups and their tasks"),
 		),
@@ -26,7 +27,7 @@ func (s *Server) registerResources() {
 
 			return []mcp.ResourceContents{
 				mcp.TextResourceContents{
-					URI:      "devtoolkit://task-groups",
+					URI:      "dev-workflow://task-groups",
 					MIMEType: "application/json",
 					Text:     string(data),
 				},
@@ -37,7 +38,7 @@ func (s *Server) registerResources() {
 	// Register task-dependencies resource
 	s.mcpServer.AddResource(
 		mcp.NewResource(
-			"devtoolkit://task-dependencies",
+			"dev-workflow://task-dependencies",
 			"Task Dependencies",
 			mcp.WithResourceDescription("Task dependency graph"),
 		),
@@ -58,7 +59,7 @@ func (s *Server) registerResources() {
 
 			return []mcp.ResourceContents{
 				mcp.TextResourceContents{
-					URI:      "devtoolkit://task-dependencies",
+					URI:      "dev-workflow://task-dependencies",
 					MIMEType: "application/json",
 					Text:     string(data),
 				},
@@ -69,16 +70,16 @@ func (s *Server) registerResources() {
 	// Register template documentation resource
 	s.mcpServer.AddResource(
 		mcp.NewResource(
-			"devtoolkit://docs/templates",
+			"dev-workflow://docs/templates",
 			"Template System Documentation",
 			mcp.WithResourceDescription("Comprehensive guide to the template system for prompts and commands"),
 		),
 		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-			doc := `# Dev Toolkit MCP - Template System
+			doc := `# Dev Workflow MCP - Template System
 
 ## Overview
 
-The Dev Toolkit MCP server uses Go's text/template package for two types of templates:
+The Dev Workflow MCP server uses Go's text/template package for two types of templates:
 1. **Prompt templates** - Reference available tasks and their operations
 2. **Command templates** - Substitute parameters into task commands
 
@@ -315,7 +316,7 @@ tasks:
 `
 			return []mcp.ResourceContents{
 				mcp.TextResourceContents{
-					URI:      "devtoolkit://docs/templates",
+					URI:      "dev-workflow://docs/templates",
 					MIMEType: "text/markdown",
 					Text:     doc,
 				},
@@ -326,23 +327,23 @@ tasks:
 	// Register configuration documentation resource
 	s.mcpServer.AddResource(
 		mcp.NewResource(
-			"devtoolkit://docs/configuration",
+			"dev-workflow://docs/configuration",
 			"Configuration Documentation",
-			mcp.WithResourceDescription("Complete guide to the mcp-tasks.yaml configuration file"),
+			mcp.WithResourceDescription("Complete guide to the .dev_workflow.yaml configuration file"),
 		),
 		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-			doc := `# Dev Toolkit MCP - Configuration Guide
+			doc := `# Dev Workflow MCP - Configuration Guide
 
 ## Overview
 
-The Dev Toolkit MCP server reads task definitions from a YAML manifest file. This guide covers all configuration options and best practices.
+The Dev Workflow MCP server reads task definitions from a YAML manifest file. This guide covers all configuration options and best practices.
 
 ## File Location Priority
 
 The server searches for configuration files in this order:
 1. Custom path specified with ` + "`-config <path>`" + ` flag
-2. ` + "`./mcp-tasks.yaml`" + ` in the project root
-3. ` + "`./.mcp/tasks.yaml`" + ` in the hidden .mcp directory
+2. ` + "`./.dev_workflow.yaml`" + ` in the project root
+3. ` + "`./.dev_workflow/`" + ` directory
 
 ## Basic Structure
 
@@ -553,7 +554,7 @@ task_groups:
       - frontend_test
 ` + "```" + `
 
-Task groups are exposed as the ` + "`devtoolkit://task-groups`" + ` MCP resource.
+Task groups are exposed as the ` + "`dev-workflow://task-groups`" + ` MCP resource.
 
 ## Prompts
 
@@ -786,8 +787,8 @@ tasks:
 **Error:** ` + "`no task manifest found`" + `
 
 **Solution:** Ensure your config file is in one of these locations:
-- ` + "`./mcp-tasks.yaml`" + `
-- ` + "`./.mcp/tasks.yaml`" + `
+- ` + "`./.dev_workflow.yaml`" + `
+- ` + "`./.dev_workflow/`" + `
 - Or specify with ` + "`-config <path>`" + ` flag
 
 ### Invalid YAML Syntax
@@ -819,17 +820,58 @@ tasks:
 
 ## Resources
 
-- Template documentation: ` + "`devtoolkit://docs/templates`" + `
-- Task groups: ` + "`devtoolkit://task-groups`" + `
-- Task dependencies: ` + "`devtoolkit://task-dependencies`" + `
+- Template documentation: ` + "`dev-workflow://docs/templates`" + `
+- Task groups: ` + "`dev-workflow://task-groups`" + `
+- Task dependencies: ` + "`dev-workflow://task-dependencies`" + `
 `
 			return []mcp.ResourceContents{
 				mcp.TextResourceContents{
-					URI:      "devtoolkit://docs/configuration",
+					URI:      "dev-workflow://docs/configuration",
 					MIMEType: "text/markdown",
 					Text:     doc,
 				},
 			}, nil
 		},
 	)
+
+	// Register custom resources from config
+	s.registerCustomResources()
+}
+
+// registerCustomResources registers user-defined resources from the manifest
+func (s *Server) registerCustomResources() {
+	for resourceName, resourceDef := range s.manifest.Resources {
+		name := resourceName
+		def := resourceDef
+
+		mimeType := def.MIMEType
+		if mimeType == "" {
+			mimeType = "text/markdown"
+		}
+
+		uri := "dev-workflow://custom/" + name
+
+		var opts []mcp.ResourceOption
+		opts = append(opts, mcp.WithResourceDescription(def.Description))
+		opts = append(opts, mcp.WithMIMEType(mimeType))
+
+		s.mcpServer.AddResource(
+			mcp.NewResource(uri, name, opts...),
+			func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+				// Resolve template variables in content
+				resolvedContent, err := template.ResolvePromptTemplate(def.Content, s.manifest.Tasks)
+				if err != nil {
+					return nil, fmt.Errorf("failed to resolve resource template: %w", err)
+				}
+
+				return []mcp.ResourceContents{
+					mcp.TextResourceContents{
+						URI:      uri,
+						MIMEType: mimeType,
+						Text:     resolvedContent,
+					},
+				}, nil
+			},
+		)
+	}
 }

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/jarosser06/dev-toolkit-mcp/internal/config"
+	"github.com/jarosser06/dev-workflow-mcp/internal/config"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 

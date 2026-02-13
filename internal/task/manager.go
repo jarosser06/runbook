@@ -3,9 +3,9 @@ package task
 import (
 	"fmt"
 
-	"github.com/jarosser06/dev-toolkit-mcp/internal/config"
-	"github.com/jarosser06/dev-toolkit-mcp/internal/logs"
-	"github.com/jarosser06/dev-toolkit-mcp/internal/template"
+	"github.com/jarosser06/dev-workflow-mcp/internal/config"
+	"github.com/jarosser06/dev-workflow-mcp/internal/logs"
+	"github.com/jarosser06/dev-workflow-mcp/internal/template"
 )
 
 // ProcessManager interface for daemon operations
@@ -21,22 +21,27 @@ type ProcessManager interface {
 // Manager coordinates task execution
 type Manager struct {
 	executor       *Executor
+	dedupExecutor  *DedupExecutor
 	processManager ProcessManager
 	manifest       *config.Manifest
 }
 
 // NewManager creates a new task manager
 func NewManager(manifest *config.Manifest, processManager ProcessManager) *Manager {
+	executor := NewExecutor(manifest)
 	return &Manager{
-		executor:       NewExecutor(manifest),
+		executor:       executor,
+		dedupExecutor:  NewDedupExecutor(executor),
 		processManager: processManager,
 		manifest:       manifest,
 	}
 }
 
-// ExecuteOneShot executes a one-shot task
+// ExecuteOneShot executes a one-shot task with deduplication.
+// If the same task+params is already running, callers wait for
+// the existing execution and receive the same result.
 func (m *Manager) ExecuteOneShot(taskName string, params map[string]interface{}) (*ExecutionResult, error) {
-	return m.executor.Execute(taskName, params)
+	return m.dedupExecutor.Execute(taskName, params)
 }
 
 // StartDaemon starts a daemon task

@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jarosser06/dev-toolkit-mcp/internal/config"
-	"github.com/jarosser06/dev-toolkit-mcp/internal/logs"
+	"github.com/jarosser06/dev-workflow-mcp/internal/config"
+	"github.com/jarosser06/dev-workflow-mcp/internal/logs"
 )
 
 // TestSessionBasedLoggingIntegration tests the complete session-based logging system end-to-end

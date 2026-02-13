@@ -298,6 +298,84 @@ func TestValidate(t *testing.T) {
 			wantError: true,
 			errorMsg:  "description is required",
 		},
+		{
+			name: "resource without description",
+			manifest: &Manifest{
+				Version: "1.0",
+				Tasks: map[string]Task{
+					"test": {
+						Description: "Run tests",
+						Command:     "go test",
+					},
+				},
+				Resources: map[string]Resource{
+					"docs": {
+						Content: "some content",
+					},
+				},
+			},
+			wantError: true,
+			errorMsg:  "resource 'docs': description is required",
+		},
+		{
+			name: "resource with neither content nor file",
+			manifest: &Manifest{
+				Version: "1.0",
+				Tasks: map[string]Task{
+					"test": {
+						Description: "Run tests",
+						Command:     "go test",
+					},
+				},
+				Resources: map[string]Resource{
+					"docs": {
+						Description: "Some docs",
+					},
+				},
+			},
+			wantError: true,
+			errorMsg:  "either content or file is required",
+		},
+		{
+			name: "resource with both content and file",
+			manifest: &Manifest{
+				Version: "1.0",
+				Tasks: map[string]Task{
+					"test": {
+						Description: "Run tests",
+						Command:     "go test",
+					},
+				},
+				Resources: map[string]Resource{
+					"docs": {
+						Description: "Some docs",
+						Content:     "inline content",
+						File:        "./docs.md",
+					},
+				},
+			},
+			wantError: true,
+			errorMsg:  "content and file are mutually exclusive",
+		},
+		{
+			name: "valid resource with content",
+			manifest: &Manifest{
+				Version: "1.0",
+				Tasks: map[string]Task{
+					"test": {
+						Description: "Run tests",
+						Command:     "go test",
+					},
+				},
+				Resources: map[string]Resource{
+					"docs": {
+						Description: "API docs",
+						Content:     "## Endpoints",
+					},
+				},
+			},
+			wantError: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -334,7 +412,7 @@ func TestLoadManifest(t *testing.T) {
 		{
 			name: "load from default location",
 			setupFiles: map[string]string{
-				"mcp-tasks.yaml": `version: "1.0"
+				".dev_workflow.yaml": `version: "1.0"
 tasks:
   test:
     description: "Run tests"
@@ -381,7 +459,7 @@ tasks:
 		{
 			name: "invalid manifest",
 			setupFiles: map[string]string{
-				"mcp-tasks.yaml": `version: "1.0"
+				".dev_workflow.yaml": `version: "1.0"
 tasks:
   test:
     command: "go test"
@@ -390,6 +468,36 @@ tasks:
 			wantError:  true,
 			wantLoaded: false,
 			errorMsg:   "description is required",
+		},
+		{
+			name: "load from .dev_workflow directory",
+			setupFiles: map[string]string{
+				".dev_workflow/tasks.yaml": `version: "1.0"
+tasks:
+  test:
+    description: "Run tests"
+    command: "go test"
+`,
+				".dev_workflow/build.yaml": `version: "1.0"
+tasks:
+  build:
+    description: "Build project"
+    command: "go build"
+`,
+			},
+			wantError:  false,
+			wantLoaded: true,
+			validateFunc: func(t *testing.T, m *Manifest) {
+				if len(m.Tasks) != 2 {
+					t.Errorf("expected 2 tasks, got %d", len(m.Tasks))
+				}
+				if _, ok := m.Tasks["test"]; !ok {
+					t.Error("expected 'test' task to exist")
+				}
+				if _, ok := m.Tasks["build"]; !ok {
+					t.Error("expected 'build' task to exist")
+				}
+			},
 		},
 	}
 
@@ -713,6 +821,117 @@ task_groups:
 					t.Error("expected 'ci' group to exist")
 				}
 			},
+		},
+		{
+			name:     "merge resources",
+			mainFile: "main.yaml",
+			files: map[string]string{
+				"main.yaml": `version: "1.0"
+imports:
+  - "./resources.yaml"
+tasks:
+  test:
+    description: "Run tests"
+    command: "go test"
+resources:
+  api_docs:
+    description: "API docs"
+    content: "## Endpoints"
+`,
+				"resources.yaml": `version: "1.0"
+resources:
+  architecture:
+    description: "System architecture"
+    content: "## Architecture overview"
+`,
+			},
+			wantError: false,
+			validate: func(t *testing.T, m *Manifest) {
+				if len(m.Resources) != 2 {
+					t.Errorf("expected 2 resources, got %d", len(m.Resources))
+				}
+				if _, ok := m.Resources["api_docs"]; !ok {
+					t.Error("expected 'api_docs' resource to exist")
+				}
+				if _, ok := m.Resources["architecture"]; !ok {
+					t.Error("expected 'architecture' resource to exist")
+				}
+			},
+		},
+		{
+			name:     "duplicate resource names",
+			mainFile: "main.yaml",
+			files: map[string]string{
+				"main.yaml": `version: "1.0"
+imports:
+  - "./resources.yaml"
+tasks:
+  test:
+    description: "Run tests"
+    command: "go test"
+resources:
+  docs:
+    description: "Docs"
+    content: "main docs"
+`,
+				"resources.yaml": `version: "1.0"
+resources:
+  docs:
+    description: "Docs"
+    content: "imported docs"
+`,
+			},
+			wantError: true,
+			errorMsg:  "duplicate resource name 'docs'",
+		},
+		{
+			name:     "resource with file reference",
+			mainFile: "main.yaml",
+			files: map[string]string{
+				"main.yaml": `version: "1.0"
+tasks:
+  test:
+    description: "Run tests"
+    command: "go test"
+resources:
+  architecture:
+    description: "System architecture"
+    file: "./docs/architecture.md"
+`,
+				"docs/architecture.md": "# Architecture\n\nThis is the architecture doc.\n",
+			},
+			wantError: false,
+			validate: func(t *testing.T, m *Manifest) {
+				r, ok := m.Resources["architecture"]
+				if !ok {
+					t.Fatal("expected 'architecture' resource to exist")
+				}
+				if r.File != "" {
+					t.Errorf("expected File to be cleared after resolution, got %s", r.File)
+				}
+				expected := "# Architecture\n\nThis is the architecture doc.\n"
+				if r.Content != expected {
+					t.Errorf("expected content %q, got %q", expected, r.Content)
+				}
+			},
+		},
+		{
+			name:     "resource with missing file",
+			mainFile: "main.yaml",
+			files: map[string]string{
+				"main.yaml": `version: "1.0"
+tasks:
+  test:
+    description: "Run tests"
+    command: "go test"
+resources:
+  docs:
+    description: "Docs"
+    file: "./nonexistent.md"
+`,
+			},
+			wantError: true,
+			errorMsg:  "failed to read file",
 		},
 		{
 			name:     "merge prompts",

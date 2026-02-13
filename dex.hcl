@@ -1,5 +1,5 @@
 project {
-  name            = "dev-toolkit-mcp"
+  name            = "dev-workflow-mcp"
   agentic_platform = "claude-code"
 
   agent_instructions = <<EOF
@@ -14,9 +14,9 @@ claude_settings "project_permissions" {
   enable_all_project_mcp_servers = true
 }
 
-mcp_server "dev-toolkit-mcp" {
-  description = "Dev Toolkit MCP"
-  command = "$${PWD}/bin/dev-toolkit-mcp"
+mcp_server "dev-workflow-mcp" {
+  description = "Dev Workflow MCP"
+  command = "$${PWD}/bin/dev-workflow-mcp"
   args = [
     "-config",
     "$${PWD}/examples/basic/mcp-tasks.yaml"
@@ -29,5 +29,9 @@ registry "dex-dev-registry" {
 
 
 plugin "base-dev" {
+  registry = "dex-dev-registry"
+}
+
+plugin "code-review" {
   registry = "dex-dev-registry"
 }
