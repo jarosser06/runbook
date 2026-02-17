@@ -53,8 +53,8 @@ Resources:
     Properties:
       DistributionConfig:
         Aliases:
-          - runbook.dev
-          - www.runbook.dev
+          - runbookmcp.dev
+          - www.runbookmcp.dev
         DefaultRootObject: index.html
         Enabled: true
         HttpVersion: http2

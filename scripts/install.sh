@@ -5,14 +5,14 @@ set -euo pipefail
 # install.sh - Install runbook binary
 #
 # Usage:
-#   curl -fsSL https://runbook.dev/install.sh | bash
-#   curl -fsSL https://runbook.dev/install.sh | bash -s -- --version 0.1.0
+#   curl -fsSL https://runbookmcp.dev/install.sh | bash
+#   curl -fsSL https://runbookmcp.dev/install.sh | bash -s -- --version 0.1.0
 #
 # Options:
 #   --version <ver>  Install a specific version (default: latest)
 ###############################################################################
 
-ARTIFACTS_URL="https://runbook.dev"
+ARTIFACTS_URL="https://runbookmcp.dev"
 INSTALL_DIR="${HOME}/.bin"
 BINARY_NAME="runbook"
 

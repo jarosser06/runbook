@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jarosser06/runbook/internal/task"
+	"runbookmcp.dev/internal/task"
 )
 
 // ANSI color codes

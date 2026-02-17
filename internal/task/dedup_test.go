@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jarosser06/runbook/internal/config"
+	"runbookmcp.dev/internal/config"
 )
 
 func TestDedupKey(t *testing.T) {

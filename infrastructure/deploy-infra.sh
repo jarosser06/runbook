@@ -2,17 +2,18 @@
 set -euo pipefail
 
 ###############################################################################
-# deploy-infra.sh - Deploy CloudFormation stack for runbook.dev infrastructure
+# deploy-infra.sh - Deploy CloudFormation stack for runbookmcp.dev infrastructure
 #
 # Usage: ./infrastructure/deploy-infra.sh [--env ENV] [--cert-arn ARN]
 #
 # Flags:
 #   --env ENV       Environment name (default: production)
-#   --cert-arn ARN  ACM certificate ARN in us-east-1 (required)
+#   --cert-arn ARN  ACM certificate ARN in us-east-1 (optional - auto-created
+#                   if not provided and no existing cert is found)
 #
 # Prerequisites:
 #   - AWS CLI authenticated
-#   - ACM certificate pre-created in us-east-1
+#   - runbookmcp.dev hosted zone in Route53 (for automatic DNS validation)
 #
 # Writes infrastructure/config.sh after successful deploy.
 ###############################################################################
@@ -21,24 +22,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/config.sh"
 TEMPLATE_FILE="${SCRIPT_DIR}/cloudformation.yaml"
 REGION="us-west-2"
+CERT_REGION="us-east-1"
+DOMAIN="runbookmcp.dev"
 
 ENV="production"
 CERT_ARN=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --env)
-      ENV="$2"
-      shift 2
-      ;;
-    --cert-arn)
-      CERT_ARN="$2"
-      shift 2
-      ;;
-    *)
-      echo "Unknown option: $1"
-      exit 1
-      ;;
+    --env)      ENV="$2";      shift 2 ;;
+    --cert-arn) CERT_ARN="$2"; shift 2 ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
 
@@ -53,22 +47,128 @@ echo "Region    : ${REGION}"
 echo "Env       : ${ENV}"
 echo ""
 
-PARAMS="ParameterKey=Environment,ParameterValue=${ENV}"
-if [ -n "$CERT_ARN" ]; then
-  PARAMS="${PARAMS} ParameterKey=AcmCertificateArn,ParameterValue=${CERT_ARN}"
-fi
+# ---- Certificate ------------------------------------------------------------
+
+ensure_certificate() {
+  echo "Checking for ACM certificate..."
+
+  # Use provided ARN if given
+  if [ -n "$CERT_ARN" ]; then
+    echo "  Using provided certificate: ${CERT_ARN}"
+    return 0
+  fi
+
+  # Look for an already-issued cert
+  CERT_ARN=$(aws acm list-certificates \
+    --region "$CERT_REGION" \
+    --certificate-statuses ISSUED \
+    --query "CertificateSummaryList[?DomainName=='${DOMAIN}'].CertificateArn" \
+    --output text 2>/dev/null | awk '{print $1}')
+
+  if [ -n "$CERT_ARN" ]; then
+    echo "  Found issued certificate: ${CERT_ARN}"
+    return 0
+  fi
+
+  # Look for a pending cert (previously requested, not yet validated)
+  CERT_ARN=$(aws acm list-certificates \
+    --region "$CERT_REGION" \
+    --certificate-statuses PENDING_VALIDATION \
+    --query "CertificateSummaryList[?DomainName=='${DOMAIN}'].CertificateArn" \
+    --output text 2>/dev/null | awk '{print $1}')
+
+  if [ -z "$CERT_ARN" ]; then
+    echo "  No certificate found. Requesting one..."
+    CERT_ARN=$(aws acm request-certificate \
+      --region "$CERT_REGION" \
+      --domain-name "$DOMAIN" \
+      --subject-alternative-names "www.${DOMAIN}" \
+      --validation-method DNS \
+      --query 'CertificateArn' \
+      --output text)
+    echo "  Requested: ${CERT_ARN}"
+    sleep 5  # Give ACM a moment to prepare validation records
+  else
+    echo "  Found pending certificate: ${CERT_ARN}"
+  fi
+
+  # Wait for validation records to appear
+  echo "  Waiting for DNS validation records..."
+  local record_name=""
+  local record_value=""
+  local attempts=0
+  while [ -z "$record_name" ] || [ "$record_name" = "None" ]; do
+    if [ $attempts -ge 12 ]; then
+      echo "ERROR: Timed out waiting for ACM validation records."
+      exit 1
+    fi
+    record_name=$(aws acm describe-certificate \
+      --region "$CERT_REGION" \
+      --certificate-arn "$CERT_ARN" \
+      --query 'Certificate.DomainValidationOptions[0].ResourceRecord.Name' \
+      --output text 2>/dev/null || true)
+    attempts=$((attempts + 1))
+    [ -z "$record_name" ] || [ "$record_name" = "None" ] && sleep 5
+  done
+
+  record_value=$(aws acm describe-certificate \
+    --region "$CERT_REGION" \
+    --certificate-arn "$CERT_ARN" \
+    --query 'Certificate.DomainValidationOptions[0].ResourceRecord.Value' \
+    --output text)
+
+  # Try to validate via Route53 automatically
+  local zone_id
+  zone_id=$(aws route53 list-hosted-zones \
+    --query "HostedZones[?Name=='${DOMAIN}.'].Id" \
+    --output text | sed 's|/hostedzone/||')
+
+  if [ -n "$zone_id" ]; then
+    echo "  Found Route53 hosted zone (${zone_id}). Adding validation record..."
+    aws route53 change-resource-record-sets \
+      --hosted-zone-id "$zone_id" \
+      --change-batch "{\"Changes\":[{\"Action\":\"UPSERT\",\"ResourceRecordSet\":{\"Name\":\"${record_name}\",\"Type\":\"CNAME\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"${record_value}\"}]}}]}" \
+      --query 'ChangeInfo.Status' \
+      --output text > /dev/null
+    echo "  Waiting for certificate validation (takes a few minutes)..."
+    aws acm wait certificate-validated \
+      --region "$CERT_REGION" \
+      --certificate-arn "$CERT_ARN"
+    echo "  Certificate issued: ${CERT_ARN}"
+  else
+    echo ""
+    echo "  ERROR: '${DOMAIN}' is not managed by Route53 in this account."
+    echo "  Add this DNS CNAME record to validate the certificate, then re-run:"
+    echo ""
+    echo "    Name:  ${record_name}"
+    echo "    Value: ${record_value}"
+    echo ""
+    echo "  Certificate ARN (use --cert-arn once validated):"
+    echo "    ${CERT_ARN}"
+    exit 1
+  fi
+}
+
+ensure_certificate
+echo ""
+
+# ---- Deploy CloudFormation --------------------------------------------------
 
 echo "Deploying CloudFormation stack..."
 aws cloudformation deploy \
   --region "${REGION}" \
   --stack-name "${STACK_NAME}" \
   --template-file "${TEMPLATE_FILE}" \
-  --parameter-overrides ${PARAMS} \
+  --parameter-overrides \
+    "ParameterKey=Environment,ParameterValue=${ENV}" \
+    "ParameterKey=AcmCertificateArn,ParameterValue=${CERT_ARN}" \
   --capabilities CAPABILITY_IAM \
   --no-fail-on-empty-changeset
 
 echo "Stack deployed successfully."
 echo ""
+
+# ---- Retrieve outputs -------------------------------------------------------
 
 echo "Retrieving outputs..."
 BUCKET_NAME=$(aws cloudformation describe-stacks \
@@ -94,6 +194,8 @@ echo "  Distribution ID    : ${DISTRIBUTION_ID}"
 echo "  Deploy User        : ${DEPLOY_USER}"
 echo ""
 
+# ---- Write config -----------------------------------------------------------
+
 echo "Writing config to '${CONFIG_FILE}'..."
 cat > "${CONFIG_FILE}" <<EOF
 # Auto-generated by deploy-infra.sh on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -102,7 +204,7 @@ cat > "${CONFIG_FILE}" <<EOF
 
 export S3_BUCKET="${BUCKET_NAME}"
 export CLOUDFRONT_DISTRIBUTION_ID="${DISTRIBUTION_ID}"
-export ARTIFACTS_URL="https://runbook.dev"
+export ARTIFACTS_URL="https://runbookmcp.dev"
 export DEPLOY_USER_NAME="${DEPLOY_USER}"
 EOF
 

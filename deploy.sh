@@ -7,8 +7,9 @@ set -euo pipefail
 # Usage: ./deploy.sh [flags]
 #
 # Flags:
-#   --infra   Deploy CloudFormation infrastructure first
-#   --clean   Remove build/ directory before building
+#   --infra           Deploy CloudFormation infrastructure first
+#   --clean           Remove build/ directory before building
+#   --cert-arn ARN    Override ACM certificate ARN (optional; auto-created otherwise)
 #
 # This script:
 #   1. Optionally deploys infrastructure
@@ -23,12 +24,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DEPLOY_INFRA=false
 CLEAN_BUILD=false
+CERT_ARN=""
 
-for arg in "$@"; do
-  case "$arg" in
-    --infra) DEPLOY_INFRA=true ;;
-    --clean) CLEAN_BUILD=true ;;
-    *) echo "Unknown flag: $arg"; exit 1 ;;
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --infra) DEPLOY_INFRA=true; shift ;;
+    --clean) CLEAN_BUILD=true; shift ;;
+    --cert-arn) CERT_ARN="$2"; shift 2 ;;
+    *) echo "Unknown flag: $1"; exit 1 ;;
   esac
 done
 
@@ -40,7 +43,11 @@ echo ""
 # ---- Optionally deploy infrastructure ---------------------------------------
 if [ "$DEPLOY_INFRA" = true ]; then
   echo "Deploying infrastructure..."
-  "${SCRIPT_DIR}/infrastructure/deploy-infra.sh"
+  INFRA_ARGS=()
+  if [ -n "$CERT_ARN" ]; then
+    INFRA_ARGS+=(--cert-arn "$CERT_ARN")
+  fi
+  "${SCRIPT_DIR}/infrastructure/deploy-infra.sh" "${INFRA_ARGS[@]}"
   echo ""
 fi
 
@@ -97,7 +104,8 @@ echo "Creating CloudFront invalidation..."
 aws cloudfront create-invalidation \
   --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
   --paths "/*" \
-  --output none
+  --query 'Invalidation.Status' \
+  --output text > /dev/null
 
 echo ""
 echo "============================================"

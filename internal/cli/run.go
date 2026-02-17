@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jarosser06/runbook/internal/config"
-	"github.com/jarosser06/runbook/internal/task"
+	"runbookmcp.dev/internal/config"
+	"runbookmcp.dev/internal/task"
 )
 
 func cmdRun(args []string) int {

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/jarosser06/runbook/internal/config"
+	"runbookmcp.dev/internal/config"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 

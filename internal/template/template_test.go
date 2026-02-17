@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jarosser06/runbook/internal/config"
+	"runbookmcp.dev/internal/config"
 )
 
 func TestResolvePromptTemplate(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jarosser06/runbook/internal/config"
-	"github.com/jarosser06/runbook/internal/logs"
+	"runbookmcp.dev/internal/config"
+	"runbookmcp.dev/internal/logs"
 )
 
 // TestSessionBasedLoggingIntegration tests the complete session-based logging system end-to-end

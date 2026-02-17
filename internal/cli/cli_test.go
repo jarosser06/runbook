@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jarosser06/runbook/internal/config"
+	"runbookmcp.dev/internal/config"
 )
 
 func TestParseGlobalFlags(t *testing.T) {
@@ -168,14 +168,14 @@ func TestParseTaskParamsNoParams(t *testing.T) {
 }
 
 func TestExecuteUnknownCommand(t *testing.T) {
-	code := Execute([]string{"unknown"})
+	code := Execute("", []string{"unknown"})
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)
 	}
 }
 
 func TestExecuteNoArgs(t *testing.T) {
-	code := Execute(nil)
+	code := Execute("", nil)
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)
 	}

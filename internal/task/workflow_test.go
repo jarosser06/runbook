@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/jarosser06/runbook/internal/config"
-	"github.com/jarosser06/runbook/internal/logs"
+	"runbookmcp.dev/internal/config"
+	"runbookmcp.dev/internal/logs"
 )
 
 func setupWorkflowTest(t *testing.T) func() {

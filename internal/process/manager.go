@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jarosser06/runbook/internal/logs"
+	"runbookmcp.dev/internal/logs"
 )
 
 // ProcessInfo holds information about a running process

@@ -5,7 +5,7 @@ MCP server that exposes development tasks defined in YAML as MCP tools.
 ## Install
 
 ```bash
-curl -fsSL https://runbook.dev/install.sh | bash
+curl -fsSL https://runbookmcp.dev/install.sh | bash
 ```
 
 ## Build

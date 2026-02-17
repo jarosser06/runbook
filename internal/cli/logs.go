@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jarosser06/runbook/internal/logs"
+	"runbookmcp.dev/internal/logs"
 )
 
 func cmdLogs(args []string) int {

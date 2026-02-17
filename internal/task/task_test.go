@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jarosser06/runbook/internal/config"
-	"github.com/jarosser06/runbook/internal/logs"
+	"runbookmcp.dev/internal/config"
+	"runbookmcp.dev/internal/logs"
 )
 
 type MockProcessManager struct {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jarosser06/runbook/internal/config"
+	"runbookmcp.dev/internal/config"
 )
 
 func cmdStart(args []string) int {

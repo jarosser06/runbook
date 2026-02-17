@@ -8,9 +8,9 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/jarosser06/runbook/internal/config"
-	"github.com/jarosser06/runbook/internal/logs"
-	"github.com/jarosser06/runbook/internal/template"
+	"runbookmcp.dev/internal/config"
+	"runbookmcp.dev/internal/logs"
+	"runbookmcp.dev/internal/template"
 )
 
 // Executor handles execution of one-shot tasks

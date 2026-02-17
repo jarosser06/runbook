@@ -6,22 +6,63 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jarosser06/runbook/internal/config"
-	"github.com/jarosser06/runbook/internal/logs"
-	"github.com/jarosser06/runbook/internal/process"
-	"github.com/jarosser06/runbook/internal/task"
+	"runbookmcp.dev/internal/config"
+	"runbookmcp.dev/internal/logs"
+	"runbookmcp.dev/internal/process"
+	"runbookmcp.dev/internal/task"
 )
 
 // Execute dispatches the CLI subcommand and returns the exit code.
-// args should be os.Args[1:] (i.e., starting with the subcommand name).
-func Execute(args []string) int {
+// workingDir, if non-empty, is the project directory used to locate a running
+// server and (in local mode) to change the working directory before executing.
+// args should start with the subcommand name.
+func Execute(workingDir string, args []string) int {
 	if len(args) == 0 {
 		printUsage()
 		return 1
 	}
 
-	subcmd := args[0]
-	remaining := args[1:]
+	// Strip --local flag before subcommand detection.
+	local := false
+	var filtered []string
+	for _, a := range args {
+		if a == "--local" || a == "-local" {
+			local = true
+		} else {
+			filtered = append(filtered, a)
+		}
+	}
+
+	if len(filtered) == 0 {
+		printUsage()
+		return 1
+	}
+
+	subcmd := filtered[0]
+	remaining := filtered[1:]
+
+	// Auto-detect a running server and route through it (unless --local).
+	if !local {
+		serverData, err := process.ReadServerFile(workingDir)
+		if err == nil {
+			// File exists — verify the server is still alive.
+			if !process.IsProcessAlive(serverData.PID) || !process.ProbeHTTP(serverData.Addr) {
+				fmt.Fprintf(os.Stderr, "error: server.json exists but the server is not running (PID %d dead).\n", serverData.PID)
+				fmt.Fprintf(os.Stderr, "Remove %s to continue in local mode.\n", process.ServerRegistryFile)
+				return 1
+			}
+			return remoteExecute(serverData.Addr, subcmd, remaining)
+		}
+		// err != nil → no server.json (or unreadable) → fall through to local mode.
+	}
+
+	// Local mode: change to workingDir if requested.
+	if workingDir != "" {
+		if err := os.Chdir(workingDir); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: cannot change to directory %s: %v\n", workingDir, err)
+			return 1
+		}
+	}
 
 	switch subcmd {
 	case "list":
@@ -165,9 +206,11 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Global options:")
 	fmt.Fprintln(os.Stderr, "  --config=PATH    Path to task manifest file or directory")
+	fmt.Fprintln(os.Stderr, "  --local          Run locally, bypassing any running server")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Server mode (original behavior):")
 	fmt.Fprintln(os.Stderr, "  runbook                            Start MCP server (stdio)")
 	fmt.Fprintln(os.Stderr, "  runbook -serve -addr :8080         Start MCP server (HTTP)")
 	fmt.Fprintln(os.Stderr, "  runbook -init                      Initialize config file")
+	fmt.Fprintln(os.Stderr, "  runbook -working-dir PATH          Set project working directory")
 }

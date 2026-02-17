@@ -6,7 +6,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/jarosser06/runbook/internal/config"
+	"runbookmcp.dev/internal/config"
 )
 
 // shellQuote single-quotes a string for safe shell interpolation.

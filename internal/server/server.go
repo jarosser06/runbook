@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 
-	"github.com/jarosser06/runbook/internal/config"
-	"github.com/jarosser06/runbook/internal/logs"
-	"github.com/jarosser06/runbook/internal/task"
+	"runbookmcp.dev/internal/config"
+	"runbookmcp.dev/internal/logs"
+	"runbookmcp.dev/internal/process"
+	"runbookmcp.dev/internal/task"
 	"github.com/mark3labs/mcp-go/server"
 )
 
@@ -75,8 +77,18 @@ func (s *Server) Serve() error {
 
 // ServeHTTP starts the MCP server as a standalone HTTP server using
 // StreamableHTTP transport. It handles graceful shutdown on SIGINT/SIGTERM.
+// It writes a server registry file on start and removes it on shutdown.
 func (s *Server) ServeHTTP(addr string) error {
 	httpServer := server.NewStreamableHTTPServer(s.mcpServer)
+
+	normalizedAddr := normalizeAddr(addr)
+	if err := process.WriteServerFile(process.ServerFileData{
+		Addr: normalizedAddr,
+		PID:  os.Getpid(),
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to write server registry: %v\n", err)
+	}
+	defer process.DeleteServerFile("")
 
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -98,8 +110,19 @@ func (s *Server) ServeHTTP(addr string) error {
 		}
 	}()
 
-	fmt.Fprintf(os.Stderr, "Dev Workflow MCP server listening on %s\n", addr)
+	fmt.Fprintf(os.Stderr, "Dev Workflow MCP server listening on %s\n", normalizedAddr)
 	return httpServer.Start(addr)
+}
+
+// normalizeAddr expands a bare port like ":8080" to "http://localhost:8080".
+func normalizeAddr(addr string) string {
+	if strings.HasPrefix(addr, ":") {
+		return "http://localhost" + addr
+	}
+	if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
+		return "http://" + addr
+	}
+	return addr
 }
 
 // GetMCPServer returns the underlying MCP server

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jarosser06/runbook/internal/config"
+	"runbookmcp.dev/internal/config"
 )
 
 // WorkflowExecutor handles execution of composite workflows
