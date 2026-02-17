@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jarosser06/dev-workflow-mcp/internal/template"
+	"github.com/jarosser06/runbook/internal/template"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 

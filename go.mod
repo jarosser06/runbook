@@ -1,4 +1,4 @@
-module github.com/jarosser06/dev-workflow-mcp
+module github.com/jarosser06/runbook
 
 go 1.23.0
 

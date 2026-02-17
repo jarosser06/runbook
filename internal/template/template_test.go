@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jarosser06/dev-workflow-mcp/internal/config"
+	"github.com/jarosser06/runbook/internal/config"
 )
 
 func TestResolvePromptTemplate(t *testing.T) {

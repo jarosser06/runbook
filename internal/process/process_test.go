@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jarosser06/dev-workflow-mcp/internal/logs"
+	"github.com/jarosser06/runbook/internal/logs"
 )
 
 func TestManagerStartStop(t *testing.T) {

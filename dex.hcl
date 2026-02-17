@@ -35,3 +35,5 @@ plugin "base-dev" {
 plugin "code-review" {
   registry = "dex-dev-registry"
 }
+
+plugin "typescript" {}

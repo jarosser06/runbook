@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Runbook. Task Runner for Humans and AI</title>
+  <meta name="description" content="Runbook is a task runner built for the way developers work today. Define tasks once in YAML, run them from the terminal or let your AI assistant run them via MCP.">
+  <link rel="canonical" href="https://runbook.dev">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Runbook. Task Runner for Humans and AI">
+  <meta property="og:description" content="Runbook is a task runner built for the way developers work today. Define tasks once in YAML, run them from the terminal or let your AI assistant run them via MCP.">
+  <meta property="og:url" content="https://runbook.dev">
+  <meta property="og:type" content="website">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Runbook",
+    "description": "Runbook is a task runner built for the way developers work today — define tasks once in YAML, run them from the terminal or let your AI assistant run them via MCP.",
+    "url": "https://runbook.dev",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Linux, macOS, Windows",
+    "codeRepository": "https://github.com/jarosser06/runbook",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d1117;
+      --bg-surface:  #161b22;
+      --bg-code:     #1c2128;
+      --bg-nav:      rgba(13,17,23,0.92);
+      --border:      #30363d;
+      --border-soft: #21262d;
+      --text:        #e6edf3;
+      --text-muted:  #8b949e;
+      --text-faint:  #484f58;
+      --accent:      #3b82f6;
+      --accent-glow: rgba(59,130,246,0.15);
+      --accent-hover:#60a5fa;
+      --green:       #3fb950;
+      --yellow:      #d29922;
+      --purple:      #bc8cff;
+      --mono: "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      --radius: 8px;
+      --max-w: 900px;
+    }
+
+    html { font-size: 16px; scroll-behavior: smooth; scroll-padding-top: 72px; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      line-height: 1.65;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg-nav);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-inner {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 1.5rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .nav-brand {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--text);
+      margin-right: 1.5rem;
+      letter-spacing: -0.01em;
+      flex-shrink: 0;
+    }
+    .nav-brand:hover { color: var(--accent-hover); text-decoration: none; }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 0.125rem;
+      flex: 1;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .nav-links::-webkit-scrollbar { display: none; }
+
+    .nav-links a {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      padding: 0.35rem 0.7rem;
+      border-radius: 6px;
+      white-space: nowrap;
+      transition: color 0.15s, background 0.15s;
+    }
+    .nav-links a:hover {
+      color: var(--text);
+      background: var(--bg-surface);
+      text-decoration: none;
+    }
+
+    .nav-gh {
+      margin-left: auto;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--text-muted) !important;
+      font-size: 0.875rem;
+      padding: 0.35rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .nav-gh:hover {
+      color: var(--text) !important;
+      border-color: var(--accent);
+      text-decoration: none;
+    }
+
+    /* ── LAYOUT ── */
+    main {
+      flex: 1;
+      width: 100%;
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 1.5rem 4rem;
+    }
+
+    section {
+      padding: 3.5rem 0;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    section:last-of-type { border-bottom: none; }
+
+    h2 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 1.5rem;
+      letter-spacing: -0.015em;
+    }
+
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.6rem;
+    }
+
+    p { color: var(--text-muted); margin-bottom: 0.75rem; }
+    p:last-child { margin-bottom: 0; }
+
+    /* ── HERO ── */
+    .hero {
+      text-align: center;
+      padding: 5rem 0 4rem;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--accent-glow);
+      border: 1px solid rgba(59,130,246,0.3);
+      border-radius: 100px;
+      padding: 0.25rem 0.85rem;
+      font-size: 0.75rem;
+      color: var(--accent-hover);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .hero h1 {
+      font-size: clamp(3rem, 8vw, 5rem);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: var(--text);
+      line-height: 1;
+      margin-bottom: 0.75rem;
+    }
+
+    .hero .tagline {
+      font-size: clamp(1.1rem, 3vw, 1.4rem);
+      color: var(--accent);
+      font-weight: 500;
+      margin-bottom: 1.25rem;
+      letter-spacing: -0.01em;
+    }
+
+    .hero .description {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      max-width: 580px;
+      margin: 0 auto 2.25rem;
+      line-height: 1.7;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 0.65rem 1.4rem;
+      border-radius: var(--radius);
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      color: #fff;
+      text-decoration: none;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--bg-surface);
+      color: var(--text);
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 0.65rem 1.4rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      transition: border-color 0.15s, color 0.15s, transform 0.1s;
+    }
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      color: var(--accent-hover);
+      text-decoration: none;
+      transform: translateY(-1px);
+    }
+
+    /* ── CODE BLOCKS ── */
+    pre {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.25rem;
+      overflow-x: auto;
+      margin: 0.75rem 0;
+    }
+
+    pre code, .install-cmd code {
+      font-family: var(--mono);
+      font-size: 0.875rem;
+      line-height: 1.65;
+      color: var(--text);
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.82em;
+      background: var(--bg-code);
+      border: 1px solid var(--border-soft);
+      border-radius: 4px;
+      padding: 0.15em 0.45em;
+      color: var(--text);
+    }
+
+    pre code { background: none; border: none; padding: 0; font-size: 0.875rem; }
+
+    /* Syntax tints */
+    .yk { color: #79c0ff; }   /* yaml key / json key */
+    .ys { color: #a5d6ff; }   /* yaml string */
+    .yb { color: var(--green); } /* yaml bool */
+    .yn { color: var(--yellow); } /* yaml number */
+    .yc { color: var(--text-faint); font-style: italic; } /* comment */
+    .tp { color: var(--purple); } /* template param */
+    .fi { color: var(--text-muted); font-size: 0.78rem; margin-bottom: 0.35rem; display: block; }
+
+    /* ── INSTALL ── */
+    .install-platforms {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .install-platform {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.25rem;
+    }
+
+    .install-platform h3 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 0.65rem;
+    }
+
+    .install-cmd {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--bg-code);
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      padding: 0.65rem 0.9rem;
+      overflow-x: auto;
+    }
+
+    .install-prompt {
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 0.875rem;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .install-note {
+      font-size: 0.82rem;
+      color: var(--text-faint);
+      margin-top: 0.5rem;
+    }
+
+    /* ── QUICK START ── */
+    .steps { display: flex; flex-direction: column; gap: 2.25rem; }
+
+    .step { display: grid; grid-template-columns: auto 1fr; gap: 0 1.5rem; }
+
+    .step-indicator {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+
+    .step-badge {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--accent-glow);
+      border: 2px solid var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .step-line {
+      width: 2px;
+      flex: 1;
+      min-height: 1.5rem;
+      background: var(--border);
+      margin-top: 0.35rem;
+    }
+
+    .step:last-child .step-line { display: none; }
+
+    .step-content { padding-bottom: 0.5rem; }
+
+    .step-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      margin-bottom: 0.2rem;
+    }
+
+    .step-content h3 {
+      font-size: 1.05rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .prompts-list {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .prompt-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+
+    .prompt-item::before {
+      content: '›';
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 1.1rem;
+      line-height: 1.3;
+      flex-shrink: 0;
+    }
+
+    /* ── TASK TYPES ── */
+    .task-types {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+    }
+
+    .task-type-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.4rem;
+    }
+
+    .task-type-card h3 { font-size: 1rem; margin-bottom: 0.25rem; }
+
+    .type-badge {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.2em 0.55em;
+      border-radius: 4px;
+      margin-bottom: 0.75rem;
+    }
+
+    .type-badge.oneshot { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.25); }
+    .type-badge.daemon  { background: rgba(188,140,255,0.12); color: var(--purple); border: 1px solid rgba(188,140,255,0.25); }
+
+    .task-type-card p { font-size: 0.875rem; margin-bottom: 0.85rem; }
+
+    /* ── FEATURES ── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+
+    .feature-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      transition: border-color 0.2s;
+    }
+
+    .feature-card:hover { border-color: var(--accent); }
+
+    .feature-icon {
+      font-size: 1.25rem;
+      margin-bottom: 0.6rem;
+      display: block;
+    }
+
+    .feature-card h3 {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 0.35rem;
+    }
+
+    .feature-card p {
+      font-size: 0.845rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+      margin: 0;
+    }
+
+    /* ── REFERENCE TABLES ── */
+    .ref-section { margin-bottom: 2rem; }
+    .ref-section:last-child { margin-bottom: 0; }
+
+    .ref-section h3 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    th {
+      text-align: left;
+      padding: 0.55rem 0.9rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    td {
+      padding: 0.6rem 0.9rem;
+      border: 1px solid var(--border-soft);
+      vertical-align: top;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    td:first-child { white-space: nowrap; }
+
+    tr:nth-child(even) td { background: rgba(22,27,34,0.4); }
+
+    /* ── HOW IT WORKS ── */
+    .how-grid {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 0;
+      align-items: center;
+      margin-top: 0.5rem;
+    }
+
+    .how-side {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.4rem 1.5rem;
+    }
+
+    .how-side h3 {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 0.75rem;
+    }
+
+    .how-side.human h3 { color: var(--green); }
+    .how-side.ai h3 { color: var(--purple); }
+
+    .how-side ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .how-side ul li {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .how-side ul li::before {
+      content: '→';
+      font-size: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    .how-side.human ul li::before { color: var(--green); }
+    .how-side.ai ul li::before { color: var(--purple); }
+
+    .how-center {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0 1.5rem;
+    }
+
+    .how-arrow {
+      width: 36px;
+      height: 2px;
+      background: var(--border);
+      position: relative;
+    }
+
+    .how-yaml {
+      background: var(--bg-code);
+      border: 2px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .how-yaml .yaml-label {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--accent);
+      font-weight: 600;
+      display: block;
+      margin-bottom: 0.2rem;
+    }
+
+    .how-yaml .yaml-sub {
+      font-size: 0.72rem;
+      color: var(--text-faint);
+    }
+
+    .how-arrows {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: var(--text-faint);
+      font-size: 0.75rem;
+      white-space: nowrap;
+    }
+
+    .how-arrows .arr { color: var(--border); font-size: 1rem; }
+
+    /* ── HTTP SERVER ── */
+    .http-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+
+    .http-callout {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.4rem;
+    }
+
+    .http-callout h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+    }
+
+    .http-callout p { font-size: 0.875rem; margin-bottom: 0.6rem; }
+
+    .http-clients {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+
+    .http-client {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      background: var(--bg-code);
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+    }
+
+    .http-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      flex-shrink: 0;
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      text-align: center;
+      padding: 1.75rem 1.5rem;
+      color: var(--text-faint);
+      font-size: 0.82rem;
+      border-top: 1px solid var(--border);
+    }
+
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--accent-hover); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 680px) {
+      .install-platforms { grid-template-columns: 1fr; }
+      .task-types { grid-template-columns: 1fr; }
+      .features-grid { grid-template-columns: 1fr 1fr; }
+      .step { grid-template-columns: auto 1fr; }
+      .how-grid { grid-template-columns: 1fr; }
+      .how-center { flex-direction: row; padding: 0.75rem 0; }
+      .http-layout { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 480px) {
+      .hero h1 { font-size: 2.75rem; }
+      .features-grid { grid-template-columns: 1fr; }
+      .hero { padding: 3rem 0 2.75rem; }
+      section { padding: 2.5rem 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-inner">
+      <a href="#" class="nav-brand">runbook</a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#install">Install</a>
+        <a href="#quickstart">Quick Start</a>
+        <a href="#tasks">Details</a>
+      </div>
+      <a href="https://github.com/jarosser06/runbook" target="_blank" rel="noopener" class="nav-gh">
+        <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- HERO -->
+    <section class="hero">
+      <h1>Runbook</h1>
+      <p class="tagline">Make, rebuilt for the AI era</p>
+      <p class="description">
+        Define your project's tasks once in YAML. Humans run them from the terminal.
+        AI assistants run them as MCP tools. Same config, same behavior, zero duplication.
+      </p>
+      <div class="hero-actions">
+        <a href="#quickstart" class="btn-primary">Get Started</a>
+        <a href="https://github.com/jarosser06/runbook" target="_blank" rel="noopener" class="btn-secondary">
+          <svg height="15" width="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section id="how">
+      <h2>One config. Two audiences.</h2>
+      <p>Most teams end up with a Makefile for humans and a separate set of AI prompts that describe the same tasks in different words. Runbook eliminates that split. Define your tasks once in YAML and both audiences use the same definitions.</p>
+      <div class="how-grid">
+        <div class="how-side human">
+          <h3>Human developer</h3>
+          <ul>
+            <li>Runs tasks from the terminal</li>
+            <li>Inspects logs and output directly</li>
+            <li>Manages daemons with start/stop</li>
+          </ul>
+        </div>
+        <div class="how-center">
+          <div class="how-arrows"><span class="arr">→</span></div>
+          <div class="how-yaml">
+            <span class="yaml-label">.dev_workflow.yaml</span>
+            <span class="yaml-sub">single source of truth</span>
+          </div>
+          <div class="how-arrows"><span class="arr">←</span></div>
+        </div>
+        <div class="how-side ai">
+          <h3>AI assistant</h3>
+          <ul>
+            <li>Runs tasks as MCP tools</li>
+            <li>Reads logs and session metadata</li>
+            <li>Controls daemons via MCP</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features">
+      <h2>Features</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <span class="feature-icon">⚡</span>
+          <h3>Replace your Makefile</h3>
+          <p>One YAML file replaces your Makefile and your AI prompt library. No duplication between what humans type and what the AI knows.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">🔌</span>
+          <h3>MCP-native</h3>
+          <p>Each task becomes a proper MCP tool with a full schema automatically. Works with any MCP-compatible AI client.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">🌐</span>
+          <h3>Shared HTTP server</h3>
+          <p>Run <code>-serve</code> once and every AI session in every terminal connects to the same instance, sharing daemon state and logs.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">⚙️</span>
+          <h3>Daemon management</h3>
+          <p>Start, stop, check status, and tail logs for background processes. Both humans and AI manage the same running processes.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">🗂️</span>
+          <h3>Session logging</h3>
+          <p>Every execution gets a UUID session with structured logs and metadata. Query past runs from the terminal or the AI.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">📁</span>
+          <h3>Multi-file configs</h3>
+          <p>Put all tasks in one file, or load a whole directory. Use <code>imports</code> for glob-based merging. All configs are merged at startup.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- INSTALL -->
+    <section id="install">
+      <h2>Install</h2>
+      <div class="install-platforms">
+        <div class="install-platform">
+          <h3>macOS &amp; Linux</h3>
+          <div class="install-cmd">
+            <span class="install-prompt">$</span>
+            <code>curl -fsSL https://runbook.dev/install.sh | bash</code>
+          </div>
+        </div>
+        <div class="install-platform">
+          <h3>Windows (PowerShell)</h3>
+          <div class="install-cmd">
+            <span class="install-prompt">PS&gt;</span>
+            <code>irm https://runbook.dev/install.ps1 | iex</code>
+          </div>
+        </div>
+      </div>
+      <p class="install-note">Installs to <code>~/.bin/runbook</code>. Add <code>~/.bin</code> to your PATH if needed.</p>
+    </section>
+
+    <!-- QUICK START -->
+    <section id="quickstart">
+      <h2>Quick Start</h2>
+      <div class="steps">
+
+        <div class="step">
+          <div class="step-indicator">
+            <div class="step-badge">1</div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-label">Step 1</div>
+            <h3>Create a config file</h3>
+            <p>Create <code>.dev_workflow.yaml</code> at the root of your project. Define your tasks under the <code>tasks</code> key.</p>
+            <span class="fi">.dev_workflow.yaml</span>
+<pre><code><span class="yk">version</span>: <span class="ys">"1.0"</span>
+
+<span class="yk">defaults</span>:
+  <span class="yk">shell</span>: <span class="ys">"/bin/bash"</span>
+  <span class="yk">timeout</span>: <span class="yn">300</span>
+
+<span class="yk">tasks</span>:
+  <span class="yk">build</span>:
+    <span class="yk">description</span>: <span class="ys">"Build the project"</span>
+    <span class="yk">command</span>: <span class="ys">"go build -o bin/app ."</span>
+    <span class="yk">type</span>: <span class="ys">oneshot</span>
+
+  <span class="yk">dev</span>:
+    <span class="yk">description</span>: <span class="ys">"Start development server"</span>
+    <span class="yk">command</span>: <span class="ys">"npm run dev"</span>
+    <span class="yk">type</span>: <span class="ys">daemon</span></code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-indicator">
+            <div class="step-badge">2</div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-label">Step 2</div>
+            <h3>Add to your MCP client</h3>
+            <p>Point your MCP client (Claude Desktop, Claude Code, or any compatible tool) at the runbook binary and your config file.</p>
+            <span class="fi">.mcp.json</span>
+<pre><code>{
+  <span class="yk">"mcpServers"</span>: {
+    <span class="yk">"runbook"</span>: {
+      <span class="yk">"command"</span>: <span class="ys">"/path/to/runbook"</span>,
+      <span class="yk">"args"</span>: [<span class="ys">"-config"</span>, <span class="ys">".dev_workflow.yaml"</span>]
+    }
+  }
+}</code></pre>
+            <p>Runbook discovers config automatically in the current directory if you omit <code>-config</code>. It looks for <code>.dev_workflow.yaml</code> or a <code>.dev_workflow/</code> directory.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-indicator">
+            <div class="step-badge">3</div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-label">Step 3</div>
+            <h3>Ask your AI assistant</h3>
+            <p>Your tasks are now MCP tools. Ask your AI assistant to run them by name.</p>
+            <div class="prompts-list">
+              <div class="prompt-item">"Run the build task"</div>
+              <div class="prompt-item">"Start the dev server"</div>
+              <div class="prompt-item">"Show me the logs for dev"</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- HTTP SERVER -->
+    <section id="http-server">
+      <h2>Shared MCP server</h2>
+      <p>By default Runbook runs in stdio mode, which works great for a single AI session. Run it in HTTP mode and multiple sessions connect to the same instance simultaneously, sharing state, daemons, and logs.</p>
+      <div class="http-layout">
+        <div>
+<pre><code><span class="yc"># Start once, connect from anywhere</span>
+runbook -serve -config .dev_workflow.yaml
+
+<span class="yc"># or on a custom port</span>
+runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
+          <p style="margin-top:0.75rem">Then point each MCP client at <code>http://localhost:8080</code>. All sessions see the same tasks, the same running daemons, and the same log history.</p>
+        </div>
+        <div class="http-callout">
+          <h3>Why this matters</h3>
+          <p>Stdio mode starts a new process per client. HTTP mode runs one process that all clients share.</p>
+          <div class="http-clients">
+            <div class="http-client"><div class="http-dot"></div>Claude Code (terminal 1)</div>
+            <div class="http-client"><div class="http-dot"></div>Claude Code (terminal 2)</div>
+            <div class="http-client"><div class="http-dot"></div>Claude Desktop</div>
+          </div>
+          <p style="margin-top:0.85rem; font-size:0.82rem">All three see the same daemon state. If one session starts <code>dev</code>, another can check its logs or stop it.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- TASK TYPES -->
+    <section id="tasks">
+      <h2>Task Types</h2>
+      <p>Every task has a <code>type</code> that controls how Runbook manages its lifecycle.</p>
+      <div class="task-types">
+
+        <div class="task-type-card">
+          <h3>Oneshot</h3>
+          <div class="type-badge oneshot">type: oneshot</div>
+          <p>Runs a command and returns the output when it exits. Use for build, test, lint, format. Anything with a clear beginning and end.</p>
+<pre><code><span class="yk">tasks</span>:
+  <span class="yk">test</span>:
+    <span class="yk">description</span>: <span class="ys">"Run tests"</span>
+    <span class="yk">command</span>: <span class="ys">"go test ./..."</span>
+    <span class="yk">type</span>: <span class="ys">oneshot</span>
+    <span class="yk">timeout</span>: <span class="yn">120</span></code></pre>
+        </div>
+
+        <div class="task-type-card">
+          <h3>Daemon</h3>
+          <div class="type-badge daemon">type: daemon</div>
+          <p>Starts a long-running background process. Runbook registers separate <code>start</code>, <code>stop</code>, <code>status</code>, and <code>logs</code> MCP tools for each daemon.</p>
+<pre><code><span class="yk">tasks</span>:
+  <span class="yk">server</span>:
+    <span class="yk">description</span>: <span class="ys">"Start API server"</span>
+    <span class="yk">command</span>: <span class="ys">"go run ./cmd/server"</span>
+    <span class="yk">type</span>: <span class="ys">daemon</span>
+    <span class="yk">working_directory</span>: <span class="ys">"/path/to/project"</span></code></pre>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- PARAMETERS -->
+    <section id="parameters">
+      <h2>Parameters</h2>
+      <p>Tasks can accept parameters using Go template syntax. The AI assistant fills in the values automatically based on the parameter schema you define.</p>
+<pre><code><span class="yk">tasks</span>:
+  <span class="yk">deploy</span>:
+    <span class="yk">description</span>: <span class="ys">"Deploy to an environment"</span>
+    <span class="yk">command</span>: <span class="ys">"scripts/deploy.sh --env <span class="tp">{{.env}}</span> --version <span class="tp">{{.version}}</span>"</span>
+    <span class="yk">type</span>: <span class="ys">oneshot</span>
+    <span class="yk">parameters</span>:
+      <span class="yk">env</span>:
+        <span class="yk">type</span>: <span class="ys">string</span>
+        <span class="yk">required</span>: <span class="yb">true</span>
+        <span class="yk">description</span>: <span class="ys">"Target environment (staging, production)"</span>
+      <span class="yk">version</span>:
+        <span class="yk">type</span>: <span class="ys">string</span>
+        <span class="yk">required</span>: <span class="yb">false</span>
+        <span class="yk">description</span>: <span class="ys">"Version to deploy"</span>
+        <span class="yk">default</span>: <span class="ys">"latest"</span></code></pre>
+      <p>Each parameter becomes a field in the MCP tool schema, with its <code>description</code> shown to the AI. Required parameters must be provided; optional ones fall back to <code>default</code>.</p>
+      <p>You can also expose the task's working directory as a parameter using <code>expose_working_directory: true</code>. Useful when the same task runs against multiple directories.</p>
+    </section>
+
+    <!-- WORKFLOWS -->
+    <section id="workflows">
+      <h2>Workflows</h2>
+      <p>Workflows run multiple tasks in sequence with a single MCP tool call. Steps share optional parameters via template substitution, and individual steps can be marked <code>continue_on_failure</code> to keep the pipeline running even if they fail.</p>
+<pre><code><span class="yk">workflows</span>:
+  <span class="yk">ci</span>:
+    <span class="yk">description</span>: <span class="ys">"Full CI pipeline"</span>
+    <span class="yk">steps</span>:
+      - <span class="yk">task</span>: <span class="ys">lint</span>
+      - <span class="yk">task</span>: <span class="ys">test</span>
+      - <span class="yk">task</span>: <span class="ys">build</span>
+        <span class="yk">continue_on_failure</span>: <span class="yb">true</span></code></pre>
+      <p>Runbook exposes each workflow as a single MCP tool named <code>workflow_{name}</code>. The AI can run your entire CI pipeline with one call.</p>
+    </section>
+
+    <!-- REFERENCE -->
+    <section id="reference">
+      <h2>Config Reference</h2>
+
+      <div class="ref-section">
+        <h3>Top-level fields</h3>
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>version</code></td><td>Config version. Use <code>"1.0"</code>.</td></tr>
+            <tr><td><code>imports</code></td><td>List of glob patterns to merge additional config files. All merged at startup; task names must be unique across files.</td></tr>
+            <tr><td><code>defaults</code></td><td>Default <code>timeout</code> (seconds), <code>shell</code>, and <code>env</code> applied to every task unless overridden.</td></tr>
+            <tr><td><code>tasks</code></td><td>Map of named tasks. Each key becomes an MCP tool name.</td></tr>
+            <tr><td><code>workflows</code></td><td>Map of named multi-step workflows that chain tasks sequentially.</td></tr>
+            <tr><td><code>task_groups</code></td><td>Named collections of tasks for organizational grouping.</td></tr>
+            <tr><td><code>prompts</code></td><td>Templated prompts exposed as MCP prompt resources to AI assistants.</td></tr>
+            <tr><td><code>resources</code></td><td>Custom MCP resources with inline <code>content</code> or a <code>file</code> path.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="ref-section">
+        <h3>Task fields</h3>
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>description</code></td><td>Human-readable description shown to the AI in the tool schema.</td></tr>
+            <tr><td><code>command</code></td><td>Shell command to run. Supports <code>{{.param}}</code> Go template substitution.</td></tr>
+            <tr><td><code>type</code></td><td><code>oneshot</code> runs and exits. <code>daemon</code> is a long-running background process.</td></tr>
+            <tr><td><code>working_directory</code></td><td>Set a fixed working directory for the command.</td></tr>
+            <tr><td><code>expose_working_directory</code></td><td>If <code>true</code>, adds a <code>working_directory</code> parameter to the MCP tool so the caller can set it at runtime.</td></tr>
+            <tr><td><code>env</code></td><td>Map of environment variables set for this task only.</td></tr>
+            <tr><td><code>timeout</code></td><td>Timeout in seconds. Overrides the value in <code>defaults</code>.</td></tr>
+            <tr><td><code>shell</code></td><td>Shell binary used to run the command (e.g. <code>/bin/zsh</code>). Overrides the value in <code>defaults</code>.</td></tr>
+            <tr><td><code>parameters</code></td><td>Named parameters with <code>type</code>, <code>required</code>, <code>description</code>, and optional <code>default</code>.</td></tr>
+            <tr><td><code>depends_on</code></td><td>List of task names that must complete successfully before this task runs.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="ref-section">
+        <h3>CLI flags</h3>
+        <table>
+          <thead>
+            <tr><th>Flag</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>-config &lt;path&gt;</code></td><td>Path to a config file or directory. If omitted, Runbook looks for <code>.dev_workflow.yaml</code> or <code>.dev_workflow/</code> in the current directory.</td></tr>
+            <tr><td><code>-init</code></td><td>Create a minimal <code>.dev_workflow.yaml</code> in the current directory and exit.</td></tr>
+            <tr><td><code>-serve</code></td><td>Run as a standalone HTTP server instead of stdio MCP mode.</td></tr>
+            <tr><td><code>-addr &lt;addr&gt;</code></td><td>Listen address for HTTP mode (default: <code>:8080</code>).</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </section>
+
+
+  </main>
+
+  <footer>
+    <p>© 2026 runbook.dev &nbsp;·&nbsp; Built with Go &nbsp;·&nbsp; MIT License &nbsp;·&nbsp; <a href="https://github.com/jarosser06/runbook" target="_blank" rel="noopener">GitHub</a></p>
+  </footer>
+
+</body>
+</html>

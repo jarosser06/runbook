@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"text/template"
 
-	"github.com/jarosser06/dev-workflow-mcp/internal/config"
+	"github.com/jarosser06/runbook/internal/config"
 )
 
 // TaskWrapper wraps a task to provide methods for template operations

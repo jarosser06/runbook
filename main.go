@@ -7,11 +7,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/jarosser06/dev-workflow-mcp/internal/config"
-	"github.com/jarosser06/dev-workflow-mcp/internal/logs"
-	"github.com/jarosser06/dev-workflow-mcp/internal/process"
-	"github.com/jarosser06/dev-workflow-mcp/internal/server"
-	"github.com/jarosser06/dev-workflow-mcp/internal/task"
+	"github.com/jarosser06/runbook/internal/cli"
+	"github.com/jarosser06/runbook/internal/config"
+	"github.com/jarosser06/runbook/internal/logs"
+	"github.com/jarosser06/runbook/internal/process"
+	"github.com/jarosser06/runbook/internal/server"
+	"github.com/jarosser06/runbook/internal/task"
 )
 
 var (
@@ -22,7 +23,15 @@ var (
 )
 
 func main() {
-	// Parse command-line flags
+	// Detect CLI subcommands before flag.Parse()
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "run", "start", "stop", "status", "logs", "list":
+			os.Exit(cli.Execute(os.Args[1:]))
+		}
+	}
+
+	// Parse command-line flags (server mode)
 	configPath := flag.String("config", "", "Path to task manifest file or directory")
 	initFlag := flag.Bool("init", false, "Initialize configuration file")
 	serveFlag := flag.Bool("serve", false, "Run as standalone HTTP server")

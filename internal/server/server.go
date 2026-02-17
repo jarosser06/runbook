@@ -8,8 +8,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/jarosser06/dev-workflow-mcp/internal/config"
-	"github.com/jarosser06/dev-workflow-mcp/internal/task"
+	"github.com/jarosser06/runbook/internal/config"
+	"github.com/jarosser06/runbook/internal/task"
 	"github.com/mark3labs/mcp-go/server"
 )
 
@@ -29,7 +29,7 @@ type Server struct {
 func NewServer(manifest *config.Manifest, manager *task.Manager, processManager task.ProcessManager, configLoaded bool, version string, configPath string) *Server {
 	// Create MCP server with capabilities
 	mcpServer := server.NewMCPServer(
-		"dev-workflow-mcp",
+		"runbook",
 		version,
 		server.WithToolCapabilities(true),
 		server.WithResourceCapabilities(true, false),

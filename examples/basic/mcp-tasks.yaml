@@ -7,7 +7,7 @@ defaults:
 tasks:
   build:
     description: "Build the project"
-    command: "mkdir -p bin && go build -o bin/dev-workflow-mcp main.go"
+    command: "mkdir -p bin && go build -o bin/runbook main.go"
     type: oneshot
 
   test:

@@ -8,9 +8,9 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/jarosser06/dev-workflow-mcp/internal/config"
-	"github.com/jarosser06/dev-workflow-mcp/internal/logs"
-	"github.com/jarosser06/dev-workflow-mcp/internal/template"
+	"github.com/jarosser06/runbook/internal/config"
+	"github.com/jarosser06/runbook/internal/logs"
+	"github.com/jarosser06/runbook/internal/template"
 )
 
 // Executor handles execution of one-shot tasks

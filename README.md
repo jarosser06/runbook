@@ -1,11 +1,23 @@
-# dev-workflow-mcp
+# runbook
 
 MCP server that exposes development tasks defined in YAML as MCP tools.
+
+## Install
+
+```bash
+curl -fsSL https://runbook.dev/install.sh | bash
+```
 
 ## Build
 
 ```bash
-go build -o bin/dev-workflow-mcp main.go
+go build -o bin/runbook main.go
+```
+
+Or use make:
+
+```bash
+make build
 ```
 
 ## Configuration
@@ -48,243 +60,26 @@ Split config across files in `.dev_workflow/`:
 
 Each file is a standard manifest. They are merged together — task names, group names, and prompt names must be unique across files.
 
-## Usage
+## Usage with MCP
 
-### Stdio (default)
-
-Add to `.mcp.json`:
+Add to your `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "dev-workflow-mcp": {
-      "command": "/path/to/bin/dev-workflow-mcp",
-      "args": ["-config", "/path/to/.dev_workflow.yaml"]
+    "runbook": {
+      "args": ["-config", "/path/to/your/mcp-tasks.yaml"],
+      "command": "/path/to/runbook"
     }
   }
 }
 ```
 
-### Standalone HTTP server
-
-Run as a long-lived service using MCP-over-StreamableHTTP:
+## Development
 
 ```bash
-./bin/dev-workflow-mcp -serve -addr :8080 -config .dev_workflow.yaml
+make test    # Run tests
+make lint    # Run linter
+make build   # Build binary to bin/runbook
+make install # Install to $HOME/.bin/runbook
 ```
-
-This mode supports multiple concurrent clients and survives beyond a single session. Graceful shutdown on SIGINT/SIGTERM stops the HTTP server and all running daemons.
-
-## Tasks
-
-Task types:
-- `oneshot` — runs once, returns output. Generates a `run_<name>` tool.
-- `daemon` — runs in background. Generates `start_<name>`, `stop_<name>`, `status_<name>`, `logs_<name>` tools.
-
-## Workflows
-
-Workflows chain multiple oneshot tasks into a single MCP tool call. Steps run sequentially; a failure stops the pipeline (unless `continue_on_failure` is set on that step).
-
-```yaml
-workflows:
-  ci:
-    description: "Run full CI pipeline"
-    timeout: 900                    # optional, bounds entire workflow
-    parameters:                     # optional, workflow-level params
-      test_flags:
-        type: string
-        required: false
-        description: "Flags for test step"
-        default: "-v"
-    steps:
-      - task: lint
-      - task: test
-        params:                     # pass workflow params to step
-          flags: "{{.test_flags}}"
-      - task: build
-        continue_on_failure: true   # don't stop pipeline if build fails
-```
-
-**Generated MCP Tool:** `run_workflow_ci` — description includes step names: `"Run full CI pipeline (steps: lint -> test -> build)"`.
-
-### Workflow fields
-
-| Field | Required | Type | Description |
-|-------|----------|------|-------------|
-| `description` | Yes | string | Human-readable description |
-| `timeout` | No | int | Timeout in seconds for entire workflow |
-| `parameters` | No | map | Workflow-level parameter definitions (same schema as task parameters) |
-| `steps` | Yes | list | Ordered list of steps to execute |
-
-### Step fields
-
-| Field | Required | Type | Description |
-|-------|----------|------|-------------|
-| `step.task` | Yes | string | Name of an existing oneshot task |
-| `step.params` | No | map | Parameter overrides for the step. Values can use `{{.param}}` to reference workflow parameters |
-| `step.continue_on_failure` | No | bool | If true, pipeline continues even if this step fails (default: false) |
-
-### Behavior
-
-- Steps reference **oneshot tasks only** — daemon tasks are not allowed in workflows.
-- Each step reuses the existing task executor, so every step gets its own session ID and logs. Use `read_session_log` / `read_session_metadata` to inspect individual steps.
-- The workflow result aggregates all step results with `steps_run`, `steps_failed`, per-step success/skipped status, and overall `success`.
-- If `timeout` is set and the workflow exceeds it, remaining steps are marked as skipped.
-
-### Parameters
-
-Tasks can accept parameters using Go template syntax:
-
-```yaml
-tasks:
-  deploy:
-    description: "Deploy to environment"
-    command: "kubectl apply -f {{.manifest}} -n {{.namespace}}"
-    type: oneshot
-    parameters:
-      manifest:
-        type: string
-        required: true
-        description: "Path to manifest file"
-      namespace:
-        type: string
-        required: false
-        default: "default"
-        description: "Kubernetes namespace"
-```
-
-### Deduplication
-
-Concurrent identical one-shot requests (same task name + same parameters) are deduplicated. The first request executes; subsequent requests wait and receive the same result. This prevents duplicate work when multiple clients call the same tool simultaneously.
-
-## Prompts
-
-Prompts are predefined text templates exposed via the MCP `prompts/list` and `prompts/get` methods. They're useful for giving AI agents context about available workflows.
-
-Prompt templates can reference task tool names using `{{.Tasks.<name>.<method>}}`:
-
-| Method | Returns | Example |
-|--------|---------|---------|
-| `.Run` | Oneshot tool name | `run_test` |
-| `.Start` | Daemon start tool | `start_dev` |
-| `.Stop` | Daemon stop tool | `stop_dev` |
-| `.Status` | Daemon status tool | `status_dev` |
-| `.Logs` | Daemon logs tool | `logs_dev` |
-| `.Desc` | Task description | `"Run tests"` |
-
-### Example
-
-```yaml
-prompts:
-  dev_setup:
-    description: "Development workflow guide"
-    content: |
-      ## Running Tests
-      Use {{.Tasks.test.Run}} to run the test suite.
-
-      ## Dev Server
-      - Start: {{.Tasks.dev.Start}}
-      - Stop: {{.Tasks.dev.Stop}}
-      - Status: {{.Tasks.dev.Status}}
-      - Logs: {{.Tasks.dev.Logs}}
-```
-
-When a client calls `prompts/get` with `name: "dev_setup"`, the template is resolved:
-
-```
-## Running Tests
-Use run_test to run the test suite.
-
-## Dev Server
-- Start: start_dev
-- Stop: stop_dev
-- Status: status_dev
-- Logs: logs_dev
-```
-
-This lets an AI agent discover the correct tool names without hardcoding them.
-
-## Resources
-
-The server exposes MCP resources — read-only data that clients can fetch via `resources/list` and `resources/read`. These give clients structured information about the server's configuration.
-
-| URI | Description | Format |
-|-----|-------------|--------|
-| `dev-workflow://task-groups` | Task groups and their member tasks | JSON |
-| `dev-workflow://task-dependencies` | Dependency graph between tasks | JSON |
-| `dev-workflow://docs/templates` | Template syntax reference | Markdown |
-| `dev-workflow://docs/configuration` | Full configuration guide | Markdown |
-
-### Example: task-groups
-
-Given this config:
-
-```yaml
-task_groups:
-  ci:
-    description: "CI pipeline"
-    tasks:
-      - lint
-      - test
-      - build
-```
-
-Reading `dev-workflow://task-groups` returns:
-
-```json
-{
-  "ci": {
-    "Description": "CI pipeline",
-    "Tasks": ["lint", "test", "build"]
-  }
-}
-```
-
-### Example: task-dependencies
-
-Given tasks with `depends_on`:
-
-```yaml
-tasks:
-  test:
-    description: "Run tests"
-    command: "go test ./..."
-    type: oneshot
-  build:
-    description: "Build project"
-    command: "go build"
-    type: oneshot
-    depends_on:
-      - test
-```
-
-Reading `dev-workflow://task-dependencies` returns:
-
-```json
-{
-  "build": ["test"]
-}
-```
-
-## Built-in Tools
-
-These tools are always available regardless of configuration:
-
-- `refresh_config` — reloads all configuration from disk without restarting the server. New tasks appear immediately, removed tasks are cleaned up.
-- `list_sessions` — lists recent execution sessions for a task.
-- `read_session_metadata` — reads metadata (params, timing, exit code) for a session.
-- `read_session_log` — reads log output for a session.
-- `init` — creates a starter `.dev_workflow.yaml` (only available when no config is loaded).
-
-## Logs
-
-All task executions are logged to `._dev_tools/logs/sessions/<session-id>/`. Each execution gets a unique session ID for traceability.
-
-## CLI Flags
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-config` | _(auto-detect)_ | Path to config file or directory |
-| `-init` | `false` | Create a starter `.dev_workflow.yaml` and exit |
-| `-serve` | `false` | Run as standalone HTTP server instead of stdio |
-| `-addr` | `:8080` | Listen address for HTTP mode |

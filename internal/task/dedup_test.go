@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jarosser06/dev-workflow-mcp/internal/config"
+	"github.com/jarosser06/runbook/internal/config"
 )
 
 func TestDedupKey(t *testing.T) {
