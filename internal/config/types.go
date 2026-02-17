@@ -19,6 +19,7 @@ type Manifest struct {
 	Prompts    map[string]Prompt      `yaml:"prompts"`
 	Resources  map[string]Resource    `yaml:"resources"`
 	Defaults   Defaults               `yaml:"defaults"`
+	Workflows  map[string]Workflow    `yaml:"workflows"`
 }
 
 // Task represents a single executable task
@@ -69,4 +70,19 @@ type Defaults struct {
 	Timeout int               `yaml:"timeout"`
 	Shell   string            `yaml:"shell"`
 	Env     map[string]string `yaml:"env"`
+}
+
+// Workflow represents a composite workflow that runs multiple tasks sequentially
+type Workflow struct {
+	Description string           `yaml:"description"`
+	Timeout     int              `yaml:"timeout"`
+	Parameters  map[string]Param `yaml:"parameters"`
+	Steps       []WorkflowStep   `yaml:"steps"`
+}
+
+// WorkflowStep represents a single step in a workflow
+type WorkflowStep struct {
+	Task              string            `yaml:"task"`
+	Params            map[string]string `yaml:"params"`
+	ContinueOnFailure bool             `yaml:"continue_on_failure"`
 }

@@ -53,6 +53,13 @@ func Validate(manifest *Manifest) error {
 		}
 	}
 
+	// Validate workflows
+	for workflowName, workflow := range manifest.Workflows {
+		if err := validateWorkflow(workflowName, workflow, manifest.Tasks); err != nil {
+			errors = append(errors, err.Error())
+		}
+	}
+
 	if len(errors) > 0 {
 		return fmt.Errorf("validation errors:\n  - %s", strings.Join(errors, "\n  - "))
 	}
@@ -157,6 +164,52 @@ func validateResource(name string, resource Resource) error {
 
 	if resource.Content != "" && resource.File != "" {
 		errors = append(errors, fmt.Sprintf("resource '%s': content and file are mutually exclusive", name))
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("%s", strings.Join(errors, "; "))
+	}
+
+	return nil
+}
+
+func validateWorkflow(name string, workflow Workflow, allTasks map[string]Task) error {
+	var errors []string
+
+	if workflow.Description == "" {
+		errors = append(errors, fmt.Sprintf("workflow '%s': description is required", name))
+	}
+
+	if len(workflow.Steps) == 0 {
+		errors = append(errors, fmt.Sprintf("workflow '%s': must contain at least one step", name))
+	}
+
+	// Validate each step
+	for i, step := range workflow.Steps {
+		if step.Task == "" {
+			errors = append(errors, fmt.Sprintf("workflow '%s': step %d must reference a task", name, i))
+			continue
+		}
+
+		task, exists := allTasks[step.Task]
+		if !exists {
+			errors = append(errors, fmt.Sprintf("workflow '%s': step %d references non-existent task '%s'", name, i, step.Task))
+			continue
+		}
+
+		if task.Type == TaskTypeDaemon {
+			errors = append(errors, fmt.Sprintf("workflow '%s': step %d references daemon task '%s' (only oneshot tasks allowed)", name, i, step.Task))
+		}
+	}
+
+	// Validate workflow parameters
+	for paramName, param := range workflow.Parameters {
+		if param.Type == "" {
+			errors = append(errors, fmt.Sprintf("workflow '%s': parameter '%s' must specify a type", name, paramName))
+		}
+		if param.Description == "" {
+			errors = append(errors, fmt.Sprintf("workflow '%s': parameter '%s' must have a description", name, paramName))
+		}
 	}
 
 	if len(errors) > 0 {

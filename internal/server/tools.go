@@ -23,6 +23,9 @@ func (s *Server) registerTools() {
 			s.registerDaemonTools(taskName, taskDef)
 		}
 	}
+
+	// Register workflow tools
+	s.registerWorkflowTools()
 }
 
 // registerOneShotTool registers a one-shot task as an MCP tool

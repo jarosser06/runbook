@@ -43,3 +43,22 @@ type DaemonStopResult struct {
 	Message string `json:"message"`
 	Error   string `json:"error,omitempty"`
 }
+
+// WorkflowStepResult represents the result of a single workflow step
+type WorkflowStepResult struct {
+	StepIndex int              `json:"step_index"`
+	TaskName  string           `json:"task_name"`
+	Result    *ExecutionResult `json:"result,omitempty"`
+	Skipped   bool             `json:"skipped"`
+}
+
+// WorkflowResult represents the aggregated result of a workflow execution
+type WorkflowResult struct {
+	Success      bool                 `json:"success"`
+	WorkflowName string              `json:"workflow_name"`
+	Steps        []WorkflowStepResult `json:"steps"`
+	Duration     time.Duration        `json:"duration"`
+	Error        string               `json:"error,omitempty"`
+	StepsRun     int                  `json:"steps_run"`
+	StepsFailed  int                  `json:"steps_failed"`
+}

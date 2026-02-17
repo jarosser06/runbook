@@ -357,6 +357,9 @@ defaults:
 tasks:
   # Task definitions...
 
+workflows:
+  # Workflow definitions...
+
 task_groups:
   # Task group definitions...
 
@@ -533,6 +536,56 @@ When ` + "`expose_working_directory: true`" + ` is set, the generated MCP tool w
 
 This enables flexible task execution where the working directory can be determined dynamically based on context, while maintaining a sensible default.
 
+## Workflows
+
+**Optional.** Composite workflows that chain multiple oneshot tasks into a single MCP tool call.
+
+` + "```yaml" + `
+workflows:
+  ci:
+    description: "Run full CI pipeline"
+    timeout: 900
+    parameters:
+      test_flags:
+        type: string
+        required: false
+        description: "Flags for test step"
+        default: "-v"
+    steps:
+      - task: lint
+      - task: test
+        params:
+          flags: "{{.test_flags}}"
+      - task: build
+        continue_on_failure: true
+` + "```" + `
+
+**Generated MCP Tool:** ` + "`run_workflow_ci`" + ` — description includes step names.
+
+### Workflow Fields
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| description | Yes | string | Human-readable description |
+| timeout | No | int | Timeout in seconds for entire workflow |
+| parameters | No | map | Workflow-level parameters (same schema as task parameters) |
+| steps | Yes | list | Ordered list of steps to execute |
+
+### Step Fields
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| task | Yes | string | Name of an existing oneshot task |
+| params | No | map | Parameter overrides — values can use ` + "`{{.param}}`" + ` to reference workflow parameters |
+| continue_on_failure | No | bool | If true, pipeline continues when step fails (default: false) |
+
+### Behavior
+
+- Steps run sequentially. Failure stops the pipeline unless ` + "`continue_on_failure: true`" + `.
+- Only oneshot tasks can be referenced — daemon tasks are not allowed.
+- Each step gets its own session ID and logs.
+- If ` + "`timeout`" + ` is set and exceeded, remaining steps are marked as skipped.
+
 ## Task Groups
 
 **Optional.** Logical grouping of related tasks.
@@ -649,6 +702,15 @@ tasks:
         required: true
         description: "Content to write to the file"
 
+workflows:
+  ci:
+    description: "Run full CI pipeline"
+    steps:
+      - task: lint
+      - task: test
+      - task: build
+        continue_on_failure: true
+
 task_groups:
   ci:
     description: "CI/CD pipeline"
@@ -694,6 +756,7 @@ The server validates configurations on load:
 4. **Valid parameters**: Parameters must have type, required, and description
 5. **Valid timeouts**: Must be positive integers
 6. **Valid environment**: Must be key-value string pairs
+7. **Valid workflows**: Must have description and at least one step; steps must reference existing oneshot tasks (not daemons); workflow parameters follow the same rules as task parameters
 
 ## Best Practices
 

@@ -16,9 +16,10 @@ func mergeManifests(base *Manifest, imports []*Manifest) (*Manifest, error) {
 		TaskGroups: make(map[string]TaskGroup),
 		Prompts:    make(map[string]Prompt),
 		Resources:  make(map[string]Resource),
+		Workflows:  make(map[string]Workflow),
 	}
 
-	// Start with base manifest tasks, groups, prompts, and resources
+	// Start with base manifest tasks, groups, prompts, resources, and workflows
 	if err := mergeTasks(result.Tasks, base.Tasks); err != nil {
 		return nil, err
 	}
@@ -29,6 +30,9 @@ func mergeManifests(base *Manifest, imports []*Manifest) (*Manifest, error) {
 		return nil, err
 	}
 	if err := mergeResources(result.Resources, base.Resources); err != nil {
+		return nil, err
+	}
+	if err := mergeWorkflows(result.Workflows, base.Workflows); err != nil {
 		return nil, err
 	}
 
@@ -44,6 +48,9 @@ func mergeManifests(base *Manifest, imports []*Manifest) (*Manifest, error) {
 			return nil, err
 		}
 		if err := mergeResources(result.Resources, imported.Resources); err != nil {
+			return nil, err
+		}
+		if err := mergeWorkflows(result.Workflows, imported.Workflows); err != nil {
 			return nil, err
 		}
 	}
@@ -95,6 +102,18 @@ func mergeResources(dst, src map[string]Resource) error {
 			return fmt.Errorf("duplicate resource name '%s' found during merge", name)
 		}
 		dst[name] = resource
+	}
+	return nil
+}
+
+// mergeWorkflows merges source workflows into destination
+// Returns error if duplicate workflow names are found
+func mergeWorkflows(dst, src map[string]Workflow) error {
+	for name, workflow := range src {
+		if _, exists := dst[name]; exists {
+			return fmt.Errorf("duplicate workflow name '%s' found during merge", name)
+		}
+		dst[name] = workflow
 	}
 	return nil
 }

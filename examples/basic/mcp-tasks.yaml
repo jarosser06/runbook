@@ -137,6 +137,15 @@ tasks:
       # Keep daemon running
       wait
 
+workflows:
+  ci:
+    description: "Run full CI pipeline"
+    steps:
+      - task: lint
+      - task: test
+      - task: build
+        continue_on_failure: true
+
 task_groups:
   ci:
     description: "CI/CD pipeline"

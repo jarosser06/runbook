@@ -81,6 +81,56 @@ Task types:
 - `oneshot` — runs once, returns output. Generates a `run_<name>` tool.
 - `daemon` — runs in background. Generates `start_<name>`, `stop_<name>`, `status_<name>`, `logs_<name>` tools.
 
+## Workflows
+
+Workflows chain multiple oneshot tasks into a single MCP tool call. Steps run sequentially; a failure stops the pipeline (unless `continue_on_failure` is set on that step).
+
+```yaml
+workflows:
+  ci:
+    description: "Run full CI pipeline"
+    timeout: 900                    # optional, bounds entire workflow
+    parameters:                     # optional, workflow-level params
+      test_flags:
+        type: string
+        required: false
+        description: "Flags for test step"
+        default: "-v"
+    steps:
+      - task: lint
+      - task: test
+        params:                     # pass workflow params to step
+          flags: "{{.test_flags}}"
+      - task: build
+        continue_on_failure: true   # don't stop pipeline if build fails
+```
+
+**Generated MCP Tool:** `run_workflow_ci` — description includes step names: `"Run full CI pipeline (steps: lint -> test -> build)"`.
+
+### Workflow fields
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| `description` | Yes | string | Human-readable description |
+| `timeout` | No | int | Timeout in seconds for entire workflow |
+| `parameters` | No | map | Workflow-level parameter definitions (same schema as task parameters) |
+| `steps` | Yes | list | Ordered list of steps to execute |
+
+### Step fields
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| `step.task` | Yes | string | Name of an existing oneshot task |
+| `step.params` | No | map | Parameter overrides for the step. Values can use `{{.param}}` to reference workflow parameters |
+| `step.continue_on_failure` | No | bool | If true, pipeline continues even if this step fails (default: false) |
+
+### Behavior
+
+- Steps reference **oneshot tasks only** — daemon tasks are not allowed in workflows.
+- Each step reuses the existing task executor, so every step gets its own session ID and logs. Use `read_session_log` / `read_session_metadata` to inspect individual steps.
+- The workflow result aggregates all step results with `steps_run`, `steps_failed`, per-step success/skipped status, and overall `success`.
+- If `timeout` is set and the workflow exceeds it, remaining steps are marked as skipped.
+
 ### Parameters
 
 Tasks can accept parameters using Go template syntax:

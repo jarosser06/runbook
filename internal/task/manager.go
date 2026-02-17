@@ -20,20 +20,22 @@ type ProcessManager interface {
 
 // Manager coordinates task execution
 type Manager struct {
-	executor       *Executor
-	dedupExecutor  *DedupExecutor
-	processManager ProcessManager
-	manifest       *config.Manifest
+	executor         *Executor
+	dedupExecutor    *DedupExecutor
+	workflowExecutor *WorkflowExecutor
+	processManager   ProcessManager
+	manifest         *config.Manifest
 }
 
 // NewManager creates a new task manager
 func NewManager(manifest *config.Manifest, processManager ProcessManager) *Manager {
 	executor := NewExecutor(manifest)
 	return &Manager{
-		executor:       executor,
-		dedupExecutor:  NewDedupExecutor(executor),
-		processManager: processManager,
-		manifest:       manifest,
+		executor:         executor,
+		dedupExecutor:    NewDedupExecutor(executor),
+		workflowExecutor: NewWorkflowExecutor(executor, manifest),
+		processManager:   processManager,
+		manifest:         manifest,
 	}
 }
 
@@ -42,6 +44,12 @@ func NewManager(manifest *config.Manifest, processManager ProcessManager) *Manag
 // the existing execution and receive the same result.
 func (m *Manager) ExecuteOneShot(taskName string, params map[string]interface{}) (*ExecutionResult, error) {
 	return m.dedupExecutor.Execute(taskName, params)
+}
+
+// ExecuteWorkflow runs a composite workflow by name with the given parameters.
+// Steps execute sequentially using the raw Executor (no dedup).
+func (m *Manager) ExecuteWorkflow(workflowName string, params map[string]interface{}) (*WorkflowResult, error) {
+	return m.workflowExecutor.Execute(workflowName, params)
 }
 
 // StartDaemon starts a daemon task

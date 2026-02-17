@@ -33,10 +33,11 @@ func (s *Server) registerRefreshConfigTool() {
 		}
 
 		result := map[string]interface{}{
-			"success": true,
-			"message": "Configuration reloaded successfully",
-			"tasks":   len(s.manifest.Tasks),
-			"prompts": len(s.manifest.Prompts),
+			"success":   true,
+			"message":   "Configuration reloaded successfully",
+			"tasks":     len(s.manifest.Tasks),
+			"prompts":   len(s.manifest.Prompts),
+			"workflows": len(s.manifest.Workflows),
 		}
 		resultJSON, _ := json.Marshal(result)
 		return mcp.NewToolResultText(string(resultJSON)), nil
@@ -107,6 +108,11 @@ func (s *Server) collectToolNames() []string {
 		case config.TaskTypeDaemon:
 			names = append(names, "start_"+taskName, "stop_"+taskName, "status_"+taskName, "logs_"+taskName)
 		}
+	}
+
+	// Workflow-derived tools
+	for workflowName := range s.manifest.Workflows {
+		names = append(names, "run_workflow_"+workflowName)
 	}
 
 	// Built-in tools
