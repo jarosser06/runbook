@@ -36,7 +36,7 @@ func TestManagerStartStop(t *testing.T) {
 	logPath := logs.GetLogPath("test-daemon")
 
 	// Start daemon
-	err = manager.Start("test-daemon", "test-session-id", "sleep 10", nil, "", logPath)
+	err = manager.Start("test-daemon", "test-session-id", "sleep 10", nil, "", logPath, "")
 	if err != nil {
 		t.Fatalf("failed to start daemon: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestManagerDoubleStart(t *testing.T) {
 	logPath := logs.GetLogPath("test-daemon")
 
 	// Start daemon
-	err = manager.Start("test-daemon", "test-session-id", "sleep 10", nil, "", logPath)
+	err = manager.Start("test-daemon", "test-session-id", "sleep 10", nil, "", logPath, "")
 	if err != nil {
 		t.Fatalf("failed to start daemon: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestManagerDoubleStart(t *testing.T) {
 	}()
 
 	// Try to start again
-	err = manager.Start("test-daemon", "test-session-id", "sleep 10", nil, "", logPath)
+	err = manager.Start("test-daemon", "test-session-id", "sleep 10", nil, "", logPath, "")
 	if err == nil {
 		t.Errorf("expected error when starting already running daemon")
 	}
@@ -162,7 +162,7 @@ func TestManagerStopAll(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		taskName := fmt.Sprintf("daemon-%d", i)
 		logPath := logs.GetLogPath(taskName)
-		err := manager.Start(taskName, "test-session-id", "sleep 10", nil, "", logPath)
+		err := manager.Start(taskName, "test-session-id", "sleep 10", nil, "", logPath, "")
 		if err != nil {
 			t.Fatalf("failed to start daemon %s: %v", taskName, err)
 		}
@@ -212,7 +212,7 @@ func TestManagerProcessExit(t *testing.T) {
 	logPath := logs.GetLogPath("test-daemon")
 
 	// Start daemon that exits quickly
-	err = manager.Start("test-daemon", "test-session-id", "echo 'hello'", nil, "", logPath)
+	err = manager.Start("test-daemon", "test-session-id", "echo 'hello'", nil, "", logPath, "")
 	if err != nil {
 		t.Fatalf("failed to start daemon: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestManagerEnvironmentVariables(t *testing.T) {
 
 	// Start daemon with environment variable
 	env := map[string]string{"TEST_VAR": "test_value"}
-	err = manager.Start("test-daemon", "test-session-id", "echo $TEST_VAR", env, "", logPath)
+	err = manager.Start("test-daemon", "test-session-id", "echo $TEST_VAR", env, "", logPath, "")
 	if err != nil {
 		t.Fatalf("failed to start daemon: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestManagerWorkingDirectory(t *testing.T) {
 	logPath := logs.GetLogPath("test-daemon")
 
 	// Start daemon with working directory
-	err = manager.Start("test-daemon", "test-session-id", "pwd", nil, testDir, logPath)
+	err = manager.Start("test-daemon", "test-session-id", "pwd", nil, testDir, logPath, "")
 	if err != nil {
 		t.Fatalf("failed to start daemon: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestManagerGetProcessInfo(t *testing.T) {
 	logPath := logs.GetLogPath("test-daemon")
 
 	// Start daemon
-	err = manager.Start("test-daemon", "test-session-id", "sleep 10", nil, "", logPath)
+	err = manager.Start("test-daemon", "test-session-id", "sleep 10", nil, "", logPath, "")
 	if err != nil {
 		t.Fatalf("failed to start daemon: %v", err)
 	}
@@ -378,6 +378,164 @@ func TestManagerGetProcessInfo(t *testing.T) {
 	}
 	if info.StartTime.IsZero() {
 		t.Errorf("expected non-zero start time")
+	}
+}
+
+func TestManagerCustomShell(t *testing.T) {
+	// Setup
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	}()
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change directory: %v", err)
+	}
+
+	if err := logs.Setup(); err != nil {
+		t.Fatalf("failed to setup logs: %v", err)
+	}
+
+	manager := NewManager()
+	logPath := logs.GetLogPath("test-daemon")
+
+	// Use sh explicitly; if shell routing works the process runs under sh
+	err = manager.Start("test-daemon", "test-session-id", "echo $0", nil, "", logPath, "/bin/sh")
+	if err != nil {
+		t.Fatalf("failed to start daemon with custom shell: %v", err)
+	}
+
+	// Wait for process to complete
+	time.Sleep(100 * time.Millisecond)
+
+	// Clean up
+	_ = manager.Stop("test-daemon")
+
+	content, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+
+	// $0 in a shell script is the shell binary name or "sh"
+	if !strings.Contains(string(content), "sh") {
+		t.Errorf("expected log to contain shell name, got: %s", content)
+	}
+}
+
+func TestManagerStopAllConcurrent(t *testing.T) {
+	// Setup
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	}()
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change directory: %v", err)
+	}
+
+	if err := logs.Setup(); err != nil {
+		t.Fatalf("failed to setup logs: %v", err)
+	}
+
+	manager := NewManager()
+
+	// Start multiple daemons
+	for i := 0; i < 5; i++ {
+		taskName := fmt.Sprintf("concurrent-daemon-%d", i)
+		logPath := logs.GetLogPath(taskName)
+		if err := manager.Start(taskName, "test-session-id", "sleep 10", nil, "", logPath, ""); err != nil {
+			t.Fatalf("failed to start daemon %s: %v", taskName, err)
+		}
+	}
+
+	// StopAll must not deadlock or race even with the background monitoring goroutines
+	if err := manager.StopAll(); err != nil {
+		t.Fatalf("StopAll failed: %v", err)
+	}
+
+	// Verify all stopped
+	for i := 0; i < 5; i++ {
+		taskName := fmt.Sprintf("concurrent-daemon-%d", i)
+		running, _, err := manager.Status(taskName)
+		if err != nil {
+			t.Fatalf("failed to get status for %s: %v", taskName, err)
+		}
+		if running {
+			t.Errorf("expected daemon %s to be stopped after StopAll", taskName)
+		}
+	}
+}
+
+func TestPIDFileRestoreAcrossManagerInstances(t *testing.T) {
+	// This is the core CLI scenario: start a daemon, create a NEW manager
+	// (simulating a new CLI invocation), and verify status is still visible.
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	}()
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change directory: %v", err)
+	}
+
+	if err := logs.Setup(); err != nil {
+		t.Fatalf("failed to setup logs: %v", err)
+	}
+
+	// Manager 1: start the daemon
+	m1 := NewManager()
+	logPath := logs.GetLogPath("persist-daemon")
+	if err := m1.Start("persist-daemon", "test-session-id", "sleep 30", nil, "", logPath, ""); err != nil {
+		t.Fatalf("failed to start daemon: %v", err)
+	}
+
+	running, pid, err := m1.Status("persist-daemon")
+	if err != nil || !running || pid == 0 {
+		t.Fatalf("expected running daemon, got running=%v pid=%d err=%v", running, pid, err)
+	}
+	t.Logf("Daemon started with PID %d", pid)
+
+	// Manager 2: simulates a new CLI invocation — must see the running daemon
+	m2 := NewManager()
+	running2, pid2, err := m2.Status("persist-daemon")
+	if err != nil {
+		t.Fatalf("unexpected error from m2.Status: %v", err)
+	}
+	if !running2 {
+		t.Errorf("Manager 2 should see the daemon as running (PID file restore)")
+	}
+	if pid2 != pid {
+		t.Errorf("expected PID %d from m2, got %d", pid, pid2)
+	}
+
+	// Manager 2 should also be able to stop the daemon
+	if err := m2.Stop("persist-daemon"); err != nil {
+		t.Fatalf("m2.Stop failed: %v", err)
+	}
+
+	// Manager 3: after stop, daemon should be gone
+	m3 := NewManager()
+	running3, _, _ := m3.Status("persist-daemon")
+	if running3 {
+		t.Errorf("Manager 3 should see daemon as stopped after m2.Stop")
 	}
 }
 
@@ -442,7 +600,7 @@ echo "Child PIDs: $CHILD1 $CHILD2"
 wait
 `
 
-	err = manager.Start("orphan-test", "test-session-id", cmd, nil, "", logPath)
+	err = manager.Start("orphan-test", "test-session-id", cmd, nil, "", logPath, "")
 	if err != nil {
 		t.Fatalf("failed to start daemon: %v", err)
 	}

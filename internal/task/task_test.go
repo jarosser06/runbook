@@ -29,7 +29,7 @@ func NewMockProcessManager() *MockProcessManager {
 	}
 }
 
-func (m *MockProcessManager) Start(taskName string, sessionID string, cmd string, env map[string]string, cwd string, logPath string) error {
+func (m *MockProcessManager) Start(taskName string, sessionID string, cmd string, env map[string]string, cwd string, logPath string, shell string) error {
 	if _, exists := m.processes[taskName]; exists && m.processes[taskName].running {
 		return fmt.Errorf("process already running")
 	}

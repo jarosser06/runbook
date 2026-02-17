@@ -283,6 +283,101 @@ func TestPromptTemplateEdgeCases(t *testing.T) {
 	}
 }
 
+func TestShellQuote(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "simple string",
+			input: "hello",
+			want:  "'hello'",
+		},
+		{
+			name:  "string with spaces",
+			input: "hello world",
+			want:  "'hello world'",
+		},
+		{
+			name:  "string with single quote",
+			input: "it's here",
+			want:  "'it'\\''s here'",
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "''",
+		},
+		{
+			name:  "string with special shell chars",
+			input: "$(rm -rf /)",
+			want:  "'$(rm -rf /)'",
+		},
+		{
+			name:  "multiple single quotes",
+			input: "it's a 'test'",
+			want:  "'it'\\''s a '\\''test'\\'''",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shellQuote(tt.input)
+			if got != tt.want {
+				t.Errorf("shellQuote(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSubstituteParametersWithShellQuote(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		params  map[string]interface{}
+		want    string
+	}{
+		{
+			name:    "shellQuote simple value",
+			command: "echo {{shellQuote .msg}}",
+			params:  map[string]interface{}{"msg": "hello"},
+			want:    "echo 'hello'",
+		},
+		{
+			name:    "shellQuote value with spaces",
+			command: "kubectl apply -f {{shellQuote .manifest}}",
+			params:  map[string]interface{}{"manifest": "my file.yaml"},
+			want:    "kubectl apply -f 'my file.yaml'",
+		},
+		{
+			name:    "shellQuote value with single quote",
+			command: "echo {{shellQuote .msg}}",
+			params:  map[string]interface{}{"msg": "it's fine"},
+			want:    "echo 'it'\\''s fine'",
+		},
+		{
+			name:    "shellQuote prevents injection",
+			command: "echo {{shellQuote .input}}",
+			params:  map[string]interface{}{"input": "$(rm -rf /)"},
+			want:    "echo '$(rm -rf /)'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := SubstituteParameters(tt.command, tt.params)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+			if result != tt.want {
+				t.Errorf("expected %q, got %q", tt.want, result)
+			}
+		})
+	}
+}
+
 func TestParameterSubstitutionEdgeCases(t *testing.T) {
 	tests := []struct {
 		name    string

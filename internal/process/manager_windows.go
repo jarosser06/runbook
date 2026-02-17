@@ -4,33 +4,30 @@ package process
 
 import (
 	"fmt"
+	"os/exec"
+	"strconv"
 	"syscall"
 )
 
 // getProcAttrs returns Windows-specific process attributes.
-//
-// NOTE: Windows process group handling is not yet implemented.
-// This stub allows the code to compile on Windows, but daemon
-// process cleanup may not work correctly on Windows systems.
-//
-// TODO: Implement proper Windows process group handling using:
-// - CREATE_NEW_PROCESS_GROUP flag in CreationFlags
-// - GenerateConsoleCtrlEvent or TerminateJobObject for termination
+// CREATE_NEW_PROCESS_GROUP makes the child the leader of a new process group,
+// equivalent to Setpgid=true on Unix.
 func getProcAttrs() *syscall.SysProcAttr {
-	// Return minimal attributes - no process group isolation on Windows yet
-	return &syscall.SysProcAttr{}
+	return &syscall.SysProcAttr{
+		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
+	}
 }
 
-// killProcessGroup sends a signal to a process on Windows.
-//
-// NOTE: Windows doesn't have Unix-style process groups in the same way.
-// This implementation only kills the immediate process, not its children.
-//
-// TODO: Implement proper process tree termination on Windows using
-// Job Objects or enumerating child processes.
+// killProcessGroup terminates a process and its entire child tree on Windows.
+// Uses taskkill /F /T /PID which forcefully kills the process tree.
+// Exit code 128 from taskkill means the process is already gone — treated as success.
 func killProcessGroup(pid int, sig syscall.Signal) error {
-	// On Windows, we can only kill the immediate process
-	// This will NOT kill child processes (known limitation)
-	return fmt.Errorf("process group termination not implemented on Windows (PID %d)", pid)
+	err := exec.Command("taskkill", "/F", "/T", "/PID", strconv.Itoa(pid)).Run()
+	if err == nil {
+		return nil
+	}
+	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 128 {
+		return nil // process already gone
+	}
+	return fmt.Errorf("failed to kill process group (PID %d): %w", pid, err)
 }
-

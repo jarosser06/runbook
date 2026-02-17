@@ -11,7 +11,7 @@ import (
 // ProcessManager interface for daemon operations
 // This will be implemented by the process package
 type ProcessManager interface {
-	Start(taskName string, sessionID string, cmd string, env map[string]string, cwd string, logPath string) error
+	Start(taskName string, sessionID string, cmd string, env map[string]string, cwd string, logPath string, shell string) error
 	Stop(taskName string) error
 	Status(taskName string) (bool, int, error)
 	GetSessionID(taskName string) (string, error)
@@ -101,7 +101,7 @@ func (m *Manager) StartDaemon(taskName string, params map[string]interface{}) (*
 	logPath := logs.GetSessionLogPath(sessionID)
 
 	workingDir := resolveWorkingDirectory(task, params)
-	if err := m.processManager.Start(taskName, sessionID, command, task.Env, workingDir, logPath); err != nil {
+	if err := m.processManager.Start(taskName, sessionID, command, task.Env, workingDir, logPath, task.Shell); err != nil {
 		return &DaemonStartResult{
 			Success: false,
 			Error:   fmt.Sprintf("failed to start daemon: %v", err),

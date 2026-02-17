@@ -27,15 +27,66 @@ type Manager struct {
 	mu        sync.RWMutex
 }
 
-// NewManager creates a new process manager
+// NewManager creates a new process manager and restores any daemons that were
+// started by a previous invocation and are still running.
 func NewManager() *Manager {
-	return &Manager{
+	pm := &Manager{
 		processes: make(map[string]*ProcessInfo),
+	}
+	pm.restoreFromPIDFiles()
+	return pm
+}
+
+// restoreFromPIDFiles scans the pids directory and re-populates the in-memory
+// process map for any daemons that are still alive. Stale PID files (dead
+// processes) are deleted automatically.
+func (pm *Manager) restoreFromPIDFiles() {
+	files, err := scanPIDFiles()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to scan PID files: %v\n", err)
+		return
+	}
+
+	for _, data := range files {
+		if !isProcessAlive(data.PID) {
+			deletePIDFile(data.TaskName)
+			continue
+		}
+
+		doneChan := make(chan struct{})
+		pm.processes[data.TaskName] = &ProcessInfo{
+			PID:       data.PID,
+			StartTime: data.StartTime,
+			LogFile:   data.LogFile,
+			SessionID: data.SessionID,
+			done:      doneChan,
+		}
+		pm.monitorRestoredProcess(data.TaskName, data.PID, doneChan)
 	}
 }
 
+// monitorRestoredProcess polls isProcessAlive for a daemon that was restored
+// from a PID file (we are not its parent so we cannot call Wait).
+// Important: close doneChan BEFORE acquiring the mutex, matching the ordering
+// in the native Start() goroutine so Stop() can unblock while holding the lock.
+func (pm *Manager) monitorRestoredProcess(taskName string, pid int, doneChan chan struct{}) {
+	go func() {
+		for {
+			time.Sleep(500 * time.Millisecond)
+			if !isProcessAlive(pid) {
+				deletePIDFile(taskName)
+				close(doneChan) // unblock any Stop() waiter before acquiring lock
+				pm.mu.Lock()
+				delete(pm.processes, taskName)
+				pm.mu.Unlock()
+				return
+			}
+		}
+	}()
+}
+
 // Start starts a new daemon process
-func (pm *Manager) Start(taskName string, sessionID string, cmd string, env map[string]string, cwd string, logPath string) error {
+func (pm *Manager) Start(taskName string, sessionID string, cmd string, env map[string]string, cwd string, logPath string, shell string) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -49,8 +100,12 @@ func (pm *Manager) Start(taskName string, sessionID string, cmd string, env map[
 		delete(pm.processes, taskName)
 	}
 
+	if shell == "" {
+		shell = "/bin/bash"
+	}
+
 	// Create command
-	command := exec.Command("/bin/bash", "-c", cmd)
+	command := exec.Command(shell, "-c", cmd)
 
 	// Set working directory
 	if cwd != "" {
@@ -118,6 +173,18 @@ func (pm *Manager) Start(taskName string, sessionID string, cmd string, env map[
 		return fmt.Errorf("failed to start process: %w", err)
 	}
 
+	// Persist PID so subsequent CLI invocations can discover this daemon
+	if err := writePIDFile(pidFileData{
+		PID:       command.Process.Pid,
+		SessionID: sessionID,
+		TaskName:  taskName,
+		StartTime: startTime,
+		LogFile:   logPath,
+	}); err != nil {
+		// Non-fatal: in-process tracking still works; warn and continue
+		fmt.Fprintf(os.Stderr, "Warning: failed to write PID file: %v\n", err)
+	}
+
 	// Store process info
 	doneChan := make(chan struct{})
 	pm.processes[taskName] = &ProcessInfo{
@@ -132,7 +199,7 @@ func (pm *Manager) Start(taskName string, sessionID string, cmd string, env map[
 	// Monitor process in background
 	go func() {
 		exitErr := command.Wait() // Capture exit status for metadata
-		_ = logFile.Close()        // Ignore close errors during cleanup
+		_ = logFile.Close()       // Ignore close errors during cleanup
 
 		// Update session metadata with end time and exit code
 		endTime := time.Now()
@@ -159,6 +226,7 @@ func (pm *Manager) Start(taskName string, sessionID string, cmd string, env map[
 			fmt.Fprintf(os.Stderr, "Warning: failed to update session metadata: %v\n", err)
 		}
 
+		deletePIDFile(taskName)
 		close(doneChan) // Signal that Wait() has completed
 		pm.mu.Lock()
 		delete(pm.processes, taskName)
@@ -210,6 +278,7 @@ func (pm *Manager) Stop(taskName string) error {
 	// Clean up (monitoring goroutine already deleted from map)
 	// But we still hold the lock, so make sure it's gone
 	delete(pm.processes, taskName)
+	deletePIDFile(taskName)
 
 	return nil
 }
@@ -235,17 +304,17 @@ func (pm *Manager) Status(taskName string) (bool, int, error) {
 // StopAll stops all running daemon processes
 func (pm *Manager) StopAll() error {
 	pm.mu.Lock()
-	defer pm.mu.Unlock()
+	names := make([]string, 0, len(pm.processes))
+	for name := range pm.processes {
+		names = append(names, name)
+	}
+	pm.mu.Unlock()
 
 	var errors []string
-
-	for taskName := range pm.processes {
-		// Unlock temporarily to call Stop (which locks)
-		pm.mu.Unlock()
-		if err := pm.Stop(taskName); err != nil {
-			errors = append(errors, fmt.Sprintf("%s: %v", taskName, err))
+	for _, name := range names {
+		if err := pm.Stop(name); err != nil {
+			errors = append(errors, fmt.Sprintf("%s: %v", name, err))
 		}
-		pm.mu.Lock()
 	}
 
 	if len(errors) > 0 {

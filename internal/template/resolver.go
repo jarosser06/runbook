@@ -3,10 +3,17 @@ package template
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"text/template"
 
 	"github.com/jarosser06/runbook/internal/config"
 )
+
+// shellQuote single-quotes a string for safe shell interpolation.
+// Embedded single quotes are escaped using the '\'' technique.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
 
 // TaskWrapper wraps a task to provide methods for template operations
 type TaskWrapper struct {
@@ -85,6 +92,7 @@ func ResolvePromptTemplate(content string, tasks map[string]config.Task) (string
 func SubstituteParameters(command string, params map[string]interface{}) (string, error) {
 	// Create template with strict mode (fails on missing keys)
 	tmpl, err := template.New("command").
+		Funcs(template.FuncMap{"shellQuote": shellQuote}).
 		Option("missingkey=error").
 		Parse(command)
 	if err != nil {

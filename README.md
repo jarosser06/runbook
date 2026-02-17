@@ -60,6 +60,45 @@ Split config across files in `.dev_workflow/`:
 
 Each file is a standard manifest. They are merged together — task names, group names, and prompt names must be unique across files.
 
+## CLI Usage
+
+Run tasks directly from the command line:
+
+```bash
+runbook list                                    # List all available tasks
+runbook run <task> [--param=value...]           # Run a oneshot task or workflow
+runbook start <task> [--param=value...]         # Start a daemon
+runbook stop <task>                             # Stop a daemon
+runbook status <task>                           # Show daemon status
+runbook logs <task> [--lines=N] [--filter=REGEX] [--session=ID]
+```
+
+All subcommands accept `--config=path` to specify a custom config location.
+
+### Examples
+
+```bash
+# List tasks defined in your config
+runbook list
+
+# Run a task
+runbook run build
+
+# Run a parameterized task
+runbook run go_test --flags="-v -race" --package="./..."
+
+# Start/stop a daemon
+runbook start dev
+runbook stop dev
+runbook status dev
+
+# View logs
+runbook logs dev --lines=50
+runbook logs dev --filter="ERROR"
+```
+
+Task output goes to stdout (pipeable). Status and metadata go to stderr.
+
 ## Usage with MCP
 
 Add to your `.mcp.json`:

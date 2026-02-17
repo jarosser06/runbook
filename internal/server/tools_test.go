@@ -7,6 +7,46 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
+func TestCollectToolNamesExcludesRefreshConfig(t *testing.T) {
+	manifest := &config.Manifest{
+		Tasks: map[string]config.Task{
+			"build": {Type: config.TaskTypeOneShot, Command: "go build"},
+			"serve": {Type: config.TaskTypeDaemon, Command: "go run ."},
+		},
+		Workflows: map[string]config.Workflow{},
+		Prompts:   map[string]config.Prompt{},
+	}
+
+	s := &Server{manifest: manifest}
+	names := s.collectToolNames()
+
+	for _, name := range names {
+		if name == "refresh_config" {
+			t.Errorf("collectToolNames() must not include 'refresh_config' (it is never deleted during refresh)")
+		}
+	}
+
+	// Sanity-check that expected names are present
+	expected := map[string]bool{
+		"run_build":    false,
+		"start_serve":  false,
+		"stop_serve":   false,
+		"status_serve": false,
+		"logs_serve":   false,
+		"init":         false,
+	}
+	for _, name := range names {
+		if _, ok := expected[name]; ok {
+			expected[name] = true
+		}
+	}
+	for name, found := range expected {
+		if !found {
+			t.Errorf("collectToolNames() missing expected name %q", name)
+		}
+	}
+}
+
 // buildOneShotToolSchema tests the schema building logic directly
 func buildOneShotToolSchema(task config.Task) mcp.ToolInputSchema {
 	inputSchema := mcp.ToolInputSchema{

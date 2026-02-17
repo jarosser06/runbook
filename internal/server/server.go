@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/jarosser06/runbook/internal/config"
+	"github.com/jarosser06/runbook/internal/logs"
 	"github.com/jarosser06/runbook/internal/task"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -44,6 +45,11 @@ func NewServer(manifest *config.Manifest, manager *task.Manager, processManager 
 		configPath:     configPath,
 		version:        version,
 		processManager: processManager,
+	}
+
+	// Clean up old sessions at startup to bound directory size
+	if _, err := logs.CleanupAllSessions(logs.DefaultRetention); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: session cleanup failed: %v\n", err)
 	}
 
 	// Register built-in tools (only if no config loaded)

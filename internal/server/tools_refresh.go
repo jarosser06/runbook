@@ -81,9 +81,6 @@ func (s *Server) Refresh() error {
 		s.registerBuiltInTools()
 	}
 
-	// Always re-register the refresh tool
-	s.registerRefreshConfigTool()
-
 	// Re-register config-derived tools, resources, and prompts
 	s.registerTools()
 	s.registerResources()
@@ -116,7 +113,7 @@ func (s *Server) collectToolNames() []string {
 	}
 
 	// Built-in tools
-	names = append(names, "init", "refresh_config")
+	names = append(names, "init")
 
 	return names
 }

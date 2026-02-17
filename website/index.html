@@ -911,6 +911,32 @@
           </div>
           <div class="step-content">
             <div class="step-label">Step 2</div>
+            <h3>Run tasks from the terminal</h3>
+            <p>Use the CLI subcommands to run tasks directly — no AI required.</p>
+<pre><code><span class="yc"># See what tasks are available</span>
+runbook list
+
+<span class="yc"># Run a task</span>
+runbook run build
+
+<span class="yc"># Run with parameters</span>
+runbook run deploy --env=staging
+
+<span class="yc"># Start a daemon, check status, view logs, stop it</span>
+runbook start dev
+runbook status dev
+runbook logs dev --lines=50
+runbook stop dev</code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-indicator">
+            <div class="step-badge">3</div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-label">Step 3</div>
             <h3>Add to your MCP client</h3>
             <p>Point your MCP client (Claude Desktop, Claude Code, or any compatible tool) at the runbook binary and your config file.</p>
             <span class="fi">.mcp.json</span>
@@ -928,11 +954,11 @@
 
         <div class="step">
           <div class="step-indicator">
-            <div class="step-badge">3</div>
+            <div class="step-badge">4</div>
             <div class="step-line"></div>
           </div>
           <div class="step-content">
-            <div class="step-label">Step 3</div>
+            <div class="step-label">Step 4</div>
             <h3>Ask your AI assistant</h3>
             <p>Your tasks are now MCP tools. Ask your AI assistant to run them by name.</p>
             <div class="prompts-list">
@@ -1088,7 +1114,25 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
       </div>
 
       <div class="ref-section">
-        <h3>CLI flags</h3>
+        <h3>CLI subcommands</h3>
+        <table>
+          <thead>
+            <tr><th>Command</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>runbook list</code></td><td>List all available tasks and workflows with their types, descriptions, and parameters.</td></tr>
+            <tr><td><code>runbook run &lt;task&gt; [--param=value...]</code></td><td>Run a oneshot task or workflow. Parameters passed as <code>--key=value</code> flags.</td></tr>
+            <tr><td><code>runbook start &lt;task&gt; [--param=value...]</code></td><td>Start a daemon task in the background.</td></tr>
+            <tr><td><code>runbook stop &lt;task&gt;</code></td><td>Stop a running daemon.</td></tr>
+            <tr><td><code>runbook status &lt;task&gt;</code></td><td>Show whether a daemon is running and its PID.</td></tr>
+            <tr><td><code>runbook logs &lt;task&gt; [--lines=N] [--filter=REGEX] [--session=ID]</code></td><td>Print task log output. Defaults to the latest session.</td></tr>
+          </tbody>
+        </table>
+        <p style="margin-top:0.75rem;font-size:0.875rem">All subcommands accept <code>--config=&lt;path&gt;</code> to specify a config file or directory.</p>
+      </div>
+
+      <div class="ref-section">
+        <h3>Server flags</h3>
         <table>
           <thead>
             <tr><th>Flag</th><th>Description</th></tr>
