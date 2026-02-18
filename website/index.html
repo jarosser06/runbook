@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Runbook. Task Runner for Humans and AI</title>
-  <meta name="description" content="Runbook is a task runner built for the way developers work today. Define tasks once in YAML, run them from the terminal or let your AI assistant run them via MCP.">
+  <meta name="description" content="Runbook wraps your existing tools (make, npm, docker, scripts) and exposes them to humans and AI through the same running process. One config, two audiences, zero drift.">
   <link rel="canonical" href="https://runbook.dev">
 
   <!-- Open Graph -->
   <meta property="og:title" content="Runbook. Task Runner for Humans and AI">
-  <meta property="og:description" content="Runbook is a task runner built for the way developers work today. Define tasks once in YAML, run them from the terminal or let your AI assistant run them via MCP.">
+  <meta property="og:description" content="Runbook wraps your existing tools (make, npm, docker, scripts) and exposes them to humans and AI through the same running process. One config, two audiences, zero drift.">
   <meta property="og:url" content="https://runbook.dev">
   <meta property="og:type" content="website">
 
@@ -19,7 +19,7 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "Runbook",
-    "description": "Runbook is a task runner built for the way developers work today — define tasks once in YAML, run them from the terminal or let your AI assistant run them via MCP.",
+    "description": "Runbook wraps your existing tools (make, npm, docker, scripts) and exposes them to humans and AI through the same running process. Define tasks once in YAML. Both audiences hit the same running process, share daemon state, and execute the exact same commands.",
     "url": "https://runbook.dev",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Linux, macOS, Windows",
@@ -77,6 +77,7 @@
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
+      overflow: visible;
     }
 
     .nav-inner {
@@ -140,6 +141,66 @@
       color: var(--text) !important;
       border-color: var(--accent);
       text-decoration: none;
+    }
+
+    /* ── HAMBURGER ── */
+    .nav-hamburger {
+      display: none;
+      margin-left: auto;
+      flex-shrink: 0;
+      align-items: center;
+      gap: 0.4rem;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 0.35rem 0.65rem;
+      font-size: 0.82rem;
+      font-family: var(--sans);
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .nav-hamburger:hover {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .nav-mobile-menu {
+      display: none;
+      flex-direction: column;
+      gap: 0.125rem;
+      position: absolute;
+      top: 56px;
+      left: 0;
+      right: 0;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.6rem 1rem;
+      z-index: 99;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    nav.mobile-open .nav-mobile-menu {
+      display: flex;
+    }
+
+    .nav-mobile-menu a {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      padding: 0.6rem 0.75rem;
+      border-radius: 6px;
+      display: block;
+      transition: color 0.15s, background 0.15s;
+    }
+    .nav-mobile-menu a:hover {
+      color: var(--text);
+      background: var(--bg-code);
+      text-decoration: none;
+    }
+    .nav-mobile-menu .nav-mobile-gh {
+      margin-top: 0.25rem;
+      border-top: 1px solid var(--border-soft);
+      padding-top: 0.6rem;
     }
 
     /* ── LAYOUT ── */
@@ -429,7 +490,7 @@
 
     .step:last-child .step-line { display: none; }
 
-    .step-content { padding-bottom: 0.5rem; }
+    .step-content { padding-bottom: 0.5rem; min-width: 0; }
 
     .step-label {
       font-size: 0.72rem;
@@ -751,6 +812,10 @@
 
     /* ── RESPONSIVE ── */
     @media (max-width: 680px) {
+      .nav-links { display: none !important; }
+      .nav-gh { display: none !important; }
+      .nav-hamburger { display: flex !important; }
+
       .install-platforms { grid-template-columns: 1fr; }
       .task-types { grid-template-columns: 1fr; }
       .features-grid { grid-template-columns: 1fr 1fr; }
@@ -758,6 +823,16 @@
       .how-grid { grid-template-columns: 1fr; }
       .how-center { flex-direction: row; padding: 0.75rem 0; }
       .http-layout { grid-template-columns: 1fr; }
+
+      /* Prevent pre blocks from blowing out grid/flex containers */
+      pre { max-width: calc(100vw - 3rem); box-sizing: border-box; }
+      /* Constrain grid children so they don't expand past available width */
+      .http-layout > *, .task-types > * { min-width: 0; }
+      /* Tables scroll horizontally */
+      .ref-section { overflow-x: auto; }
+      /* Install command */
+      .install-cmd { min-width: 0; }
+      .install-cmd code { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     }
 
     @media (max-width: 480px) {
@@ -765,25 +840,43 @@
       .features-grid { grid-template-columns: 1fr; }
       .hero { padding: 3rem 0 2.75rem; }
       section { padding: 2.5rem 0; }
+      td:first-child { white-space: normal; }
     }
   </style>
 </head>
 <body>
 
   <!-- NAV -->
-  <nav>
+  <nav id="site-nav">
     <div class="nav-inner">
       <a href="#" class="nav-brand">runbook</a>
       <div class="nav-links">
         <a href="#features">Features</a>
         <a href="#install">Install</a>
         <a href="#quickstart">Quick Start</a>
-        <a href="#tasks">Details</a>
+        <a href="#tasks">Tasks</a>
+        <a href="#prompts">Prompts</a>
+        <a href="#resources">Resources</a>
+        <a href="#reference">Reference</a>
       </div>
       <a href="https://github.com/jarosser06/runbook" target="_blank" rel="noopener" class="nav-gh">
         <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub
       </a>
+      <button class="nav-hamburger" aria-label="Open menu" onclick="toggleNav()">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true"><path d="M1.5 3h12M1.5 7.5h12M1.5 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Menu
+      </button>
+    </div>
+    <div class="nav-mobile-menu">
+      <a href="#features" onclick="closeNav()">Features</a>
+      <a href="#install" onclick="closeNav()">Install</a>
+      <a href="#quickstart" onclick="closeNav()">Quick Start</a>
+      <a href="#tasks" onclick="closeNav()">Tasks</a>
+      <a href="#prompts" onclick="closeNav()">Prompts</a>
+      <a href="#resources" onclick="closeNav()">Resources</a>
+      <a href="#reference" onclick="closeNav()">Reference</a>
+      <a href="https://github.com/jarosser06/runbook" target="_blank" rel="noopener" class="nav-mobile-gh">GitHub ↗</a>
     </div>
   </nav>
 
@@ -794,8 +887,7 @@
       <h1>Runbook</h1>
       <p class="tagline">One config. Two audiences.</p>
       <p class="description">
-        Define your project's tasks once in YAML. Humans run them from the terminal.
-        AI assistants run them as MCP tools. Same config, same behavior, zero duplication.
+        Runbook wraps your existing tools (<code>make</code>, <code>npm</code>, <code>docker</code>, custom scripts) and exposes them to humans and AI through the same running process. When you run <code>runbook run build</code> and your AI calls the build MCP tool, they execute the exact same command with the exact same flags. No drift. No guessing. No forgotten steps.
       </p>
       <div class="hero-actions">
         <a href="#quickstart" class="btn-primary">Get Started</a>
@@ -809,30 +901,30 @@
     <!-- HOW IT WORKS -->
     <section id="how">
       <h2>How it works</h2>
-      <p>Most teams end up with workflows defined across Makefiles, npm scripts, shell scripts, and a separate set of AI prompts that describe the same tasks in different words. Runbook eliminates that split. Define your tasks once and both audiences use the same definitions.</p>
+      <p>Most projects have workflows scattered across Makefiles, npm scripts, shell scripts, and Docker commands, plus a separate set of AI prompts that describe the same things in different words. Runbook eliminates that split without replacing any of your tools. Define once in YAML, point it at your existing commands, and both audiences use the same definitions through the same running process.</p>
       <div class="how-grid">
         <div class="how-side human">
           <h3>Human developer</h3>
           <ul>
-            <li>Runs tasks from the terminal</li>
-            <li>Inspects logs and output directly</li>
-            <li>Manages daemons with start/stop</li>
+            <li>Runs <code>runbook run build</code> from terminal</li>
+            <li>CLI auto-proxies through running server</li>
+            <li>Manages daemons with start/stop/logs</li>
           </ul>
         </div>
         <div class="how-center">
           <div class="how-arrows"><span class="arr">→</span></div>
           <div class="how-yaml">
             <span class="yaml-label">.dev_workflow.yaml</span>
-            <span class="yaml-sub">single source of truth</span>
+            <span class="yaml-sub">one process · shared state</span>
           </div>
           <div class="how-arrows"><span class="arr">←</span></div>
         </div>
         <div class="how-side ai">
           <h3>AI assistant</h3>
           <ul>
-            <li>Runs tasks as MCP tools</li>
-            <li>Reads logs and session metadata</li>
-            <li>Controls daemons via MCP</li>
+            <li>Calls <code>run_build</code> as MCP tool</li>
+            <li>Executes exact same command, same env</li>
+            <li>Shares daemon state with your terminal</li>
           </ul>
         </div>
       </div>
@@ -844,33 +936,48 @@
       <div class="features-grid">
         <div class="feature-card">
           <span class="feature-icon">⚡</span>
-          <h3>Stop defining your workflow twice</h3>
-          <p>Define tasks once. No separate scripts for humans and separate prompts for AI. Same definition, same behavior, both audiences.</p>
+          <h3>Wraps your existing tools</h3>
+          <p>Point tasks at <code>make build</code>, <code>npm test</code>, <code>docker compose up -d</code>. Runbook orchestrates across all of them in the same project. One interface.</p>
         </div>
         <div class="feature-card">
           <span class="feature-icon">🔌</span>
-          <h3>MCP-native</h3>
-          <p>Each task becomes a proper MCP tool with a full schema automatically. Works with any MCP-compatible AI client.</p>
+          <h3>MCP-native out of the box</h3>
+          <p>Each task becomes a proper MCP tool with a full schema automatically derived from your config. Works with any MCP-compatible AI client. No plugin or adapter needed.</p>
         </div>
         <div class="feature-card">
           <span class="feature-icon">🎯</span>
-          <h3>AI that follows your workflow</h3>
-          <p>When build, test, and lint are defined tasks, the AI calls them consistently instead of guessing at shell commands. Same execution every time.</p>
+          <h3>No drift. No guessing.</h3>
+          <p>When build is a defined task, the AI calls <code>run_build</code>. It doesn't read your Makefile and improvise. Same server, same command, same flags. What you run and what the AI runs are identical.</p>
         </div>
         <div class="feature-card">
           <span class="feature-icon">⚙️</span>
           <h3>Daemon management</h3>
-          <p>Start, stop, check status, and tail logs for background processes. Both humans and AI manage the same running processes.</p>
+          <p>Daemons get <code>start</code>, <code>stop</code>, <code>status</code>, and <code>logs</code> MCP tools registered automatically. Both humans and AI manage the same running processes. Start <code>api</code> from the terminal, check its logs from Claude.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">🌐</span>
+          <h3>Shared server + auto-proxy</h3>
+          <p>In HTTP mode, every client hits the same process. When a server is running, CLI commands automatically detect and proxy through it. Your terminal and AI sessions share daemon state and logs with no extra setup.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">🤝</span>
+          <h3>Execution deduplication</h3>
+          <p>If two AI sessions trigger the same one-shot task with identical parameters simultaneously, Runbook runs it once and returns the result to both. No redundant builds, no race conditions.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">📋</span>
+          <h3>MCP Prompts</h3>
+          <p>Define prompt templates in your config that reference your tasks by name. These become MCP prompt resources. Not just a list of tools. A playbook that tells the AI what to run, in what order, and for what purpose.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">📦</span>
+          <h3>MCP Resources</h3>
+          <p>Built-in resources expose task groups, the dependency graph, and full config docs. Add custom resources with inline content or file paths to give AI deep context about your project structure.</p>
         </div>
         <div class="feature-card">
           <span class="feature-icon">🗂️</span>
           <h3>Session logging</h3>
-          <p>Every execution gets a UUID session with structured logs and metadata. Query past runs from the terminal or the AI.</p>
-        </div>
-        <div class="feature-card">
-          <span class="feature-icon">📁</span>
-          <h3>Multi-file configs</h3>
-          <p>Put all tasks in one file, or load a whole directory. Use <code>imports</code> for glob-based merging. All configs are merged at startup.</p>
+          <p>Every execution gets a UUID session with structured logs and metadata. Query past runs from the terminal with <code>runbook logs</code> or ask the AI to pull the session log directly.</p>
         </div>
       </div>
     </section>
@@ -918,7 +1025,7 @@
           <div class="step-content">
             <div class="step-label">Step 1</div>
             <h3>Create a config file</h3>
-            <p>Create <code>.dev_workflow.yaml</code> at the root of your project. Define your tasks under the <code>tasks</code> key.</p>
+            <p>Create <code>.dev_workflow.yaml</code> at the root of your project. Point tasks at whatever tools you already use. Runbook wraps them, it doesn't replace them.</p>
             <span class="fi">.dev_workflow.yaml</span>
 <pre><code><span class="yk">version</span>: <span class="ys">"1.0"</span>
 
@@ -926,33 +1033,110 @@
   <span class="yk">shell</span>: <span class="ys">"/bin/bash"</span>
   <span class="yk">timeout</span>: <span class="yn">300</span>
 
+<span class="yk">task_groups</span>:
+  <span class="yk">backend</span>:
+    <span class="yk">description</span>: <span class="ys">"Go API tasks"</span>
+    <span class="yk">tasks</span>: [<span class="ys">build</span>, <span class="ys">test</span>, <span class="ys">lint</span>]
+  <span class="yk">frontend</span>:
+    <span class="yk">description</span>: <span class="ys">"React app tasks"</span>
+    <span class="yk">tasks</span>: [<span class="ys">frontend-install</span>, <span class="ys">frontend-build</span>]
+
 <span class="yk">tasks</span>:
+  <span class="yc"># Backend (wraps Make)</span>
   <span class="yk">build</span>:
-    <span class="yk">description</span>: <span class="ys">"Build the project"</span>
-    <span class="yk">command</span>: <span class="ys">"go build -o bin/app ."</span>
+    <span class="yk">description</span>: <span class="ys">"Compile the API binary"</span>
+    <span class="yk">command</span>: <span class="ys">"make build"</span>
+    <span class="yk">type</span>: <span class="ys">oneshot</span>
+    <span class="yk">depends_on</span>: [<span class="ys">lint</span>]
+
+  <span class="yk">test</span>:
+    <span class="yk">description</span>: <span class="ys">"Run Go test suite"</span>
+    <span class="yk">command</span>: <span class="ys">"make test"</span>
     <span class="yk">type</span>: <span class="ys">oneshot</span>
 
   <span class="yk">lint</span>:
-    <span class="yk">description</span>: <span class="ys">"Run linter"</span>
-    <span class="yk">command</span>: <span class="ys">"golangci-lint run ./..."</span>
+    <span class="yk">description</span>: <span class="ys">"Run Go linter"</span>
+    <span class="yk">command</span>: <span class="ys">"make lint"</span>
     <span class="yk">type</span>: <span class="ys">oneshot</span>
 
-  <span class="yk">test</span>:
-    <span class="yk">description</span>: <span class="ys">"Run tests"</span>
-    <span class="yk">command</span>: <span class="ys">"go test ./..."</span>
+  <span class="yc"># Frontend (wraps npm)</span>
+  <span class="yk">frontend-install</span>:
+    <span class="yk">description</span>: <span class="ys">"Install frontend dependencies"</span>
+    <span class="yk">command</span>: <span class="ys">"npm install"</span>
+    <span class="yk">type</span>: <span class="ys">oneshot</span>
+    <span class="yk">working_directory</span>: <span class="ys">"./frontend"</span>
+
+  <span class="yk">frontend-build</span>:
+    <span class="yk">description</span>: <span class="ys">"Build frontend for production"</span>
+    <span class="yk">command</span>: <span class="ys">"npm run build"</span>
+    <span class="yk">type</span>: <span class="ys">oneshot</span>
+    <span class="yk">working_directory</span>: <span class="ys">"./frontend"</span>
+
+  <span class="yc"># Infrastructure (wraps Docker)</span>
+  <span class="yk">infra-up</span>:
+    <span class="yk">description</span>: <span class="ys">"Start Postgres and Redis"</span>
+    <span class="yk">command</span>: <span class="ys">"docker compose up -d"</span>
     <span class="yk">type</span>: <span class="ys">oneshot</span>
 
-  <span class="yk">dev</span>:
-    <span class="yk">description</span>: <span class="ys">"Start development server"</span>
+  <span class="yc"># Deploy (custom script with parameters)</span>
+  <span class="yk">deploy</span>:
+    <span class="yk">description</span>: <span class="ys">"Deploy to an environment"</span>
+    <span class="yk">command</span>: <span class="ys">"scripts/deploy.sh --env <span class="tp">{{.env}}</span> --version <span class="tp">{{.version}}</span>"</span>
+    <span class="yk">type</span>: <span class="ys">oneshot</span>
+    <span class="yk">parameters</span>:
+      <span class="yk">env</span>:
+        <span class="yk">type</span>: <span class="ys">string</span>
+        <span class="yk">required</span>: <span class="yb">true</span>
+        <span class="yk">description</span>: <span class="ys">"Target environment (staging, production)"</span>
+      <span class="yk">version</span>:
+        <span class="yk">type</span>: <span class="ys">string</span>
+        <span class="yk">required</span>: <span class="yb">false</span>
+        <span class="yk">description</span>: <span class="ys">"Version tag to deploy"</span>
+        <span class="yk">default</span>: <span class="ys">"latest"</span>
+
+  <span class="yc"># Daemons (long-running dev servers)</span>
+  <span class="yk">api</span>:
+    <span class="yk">description</span>: <span class="ys">"API dev server with hot reload"</span>
+    <span class="yk">command</span>: <span class="ys">"make dev"</span>
+    <span class="yk">type</span>: <span class="ys">daemon</span>
+
+  <span class="yk">frontend-dev</span>:
+    <span class="yk">description</span>: <span class="ys">"Frontend dev server"</span>
     <span class="yk">command</span>: <span class="ys">"npm run dev"</span>
     <span class="yk">type</span>: <span class="ys">daemon</span>
+    <span class="yk">working_directory</span>: <span class="ys">"./frontend"</span>
 
 <span class="yk">workflows</span>:
   <span class="yk">ci</span>:
-    <span class="yk">description</span>: <span class="ys">"Lint and test"</span>
+    <span class="yk">description</span>: <span class="ys">"Lint, test, and build"</span>
     <span class="yk">steps</span>:
       - <span class="yk">task</span>: <span class="ys">lint</span>
-      - <span class="yk">task</span>: <span class="ys">test</span></code></pre>
+      - <span class="yk">task</span>: <span class="ys">test</span>
+      - <span class="yk">task</span>: <span class="ys">build</span>
+
+  <span class="yk">setup</span>:
+    <span class="yk">description</span>: <span class="ys">"Bootstrap local dev environment"</span>
+    <span class="yk">steps</span>:
+      - <span class="yk">task</span>: <span class="ys">infra-up</span>
+      - <span class="yk">task</span>: <span class="ys">frontend-install</span>
+
+<span class="yk">prompts</span>:
+  <span class="yk">dev-workflow</span>:
+    <span class="yk">description</span>: <span class="ys">"How to develop and test this project"</span>
+    <span class="yk">content</span>: |
+      <span class="ys">Development workflow:</span>
+      <span class="ys">1. Bootstrap: run the setup workflow</span>
+      <span class="ys">2. Start servers: <span class="tp">{{.Tasks.api.Start}}</span> and <span class="tp">{{.Tasks.frontend-dev.Start}}</span></span>
+      <span class="ys">3. Before committing: <span class="tp">{{.Tasks.ci.Run}}</span></span>
+      <span class="ys">4. Deploy to staging: <span class="tp">{{.Tasks.deploy.Run}}</span> with env=staging</span>
+
+<span class="yk">resources</span>:
+  <span class="yk">architecture</span>:
+    <span class="yk">description</span>: <span class="ys">"Project structure and tooling overview"</span>
+    <span class="yk">content</span>: |
+      <span class="ys">Backend: Go API, managed via Makefile</span>
+      <span class="ys">Frontend: React SPA in ./frontend, managed via npm</span>
+      <span class="ys">Infrastructure: Postgres + Redis, managed via docker compose</span></code></pre>
           </div>
         </div>
 
@@ -964,21 +1148,23 @@
           <div class="step-content">
             <div class="step-label">Step 2</div>
             <h3>Run tasks from the terminal</h3>
-            <p>Use the CLI subcommands to run tasks directly — no AI required.</p>
+            <p>Use the CLI subcommands to run tasks directly. No AI required.</p>
 <pre><code><span class="yc"># See what tasks are available</span>
 runbook list
 
-<span class="yc"># Run a task</span>
+<span class="yc"># These call make, npm, docker, etc.</span>
+runbook run lint
+runbook run test
 runbook run build
 
 <span class="yc"># Run with parameters</span>
 runbook run deploy --env=staging
 
 <span class="yc"># Start a daemon, check status, view logs, stop it</span>
-runbook start dev
-runbook status dev
-runbook logs dev --lines=50
-runbook stop dev</code></pre>
+runbook start api
+runbook status api
+runbook logs api --lines=50
+runbook stop api</code></pre>
           </div>
         </div>
 
@@ -1012,11 +1198,12 @@ runbook stop dev</code></pre>
           <div class="step-content">
             <div class="step-label">Step 4</div>
             <h3>Ask your AI assistant</h3>
-            <p>Your tasks are now MCP tools. Ask your AI assistant to run them by name.</p>
+            <p>Your tasks are now MCP tools. Ask your AI to run them, or let it read the prompt you defined to understand the full workflow.</p>
             <div class="prompts-list">
-              <div class="prompt-item">"Run the build task"</div>
-              <div class="prompt-item">"Start the dev server"</div>
-              <div class="prompt-item">"Show me the logs for dev"</div>
+              <div class="prompt-item">"Run the CI workflow"</div>
+              <div class="prompt-item">"Start the API and frontend dev servers"</div>
+              <div class="prompt-item">"Deploy version 1.4.2 to staging"</div>
+              <div class="prompt-item">"Show me the API server logs"</div>
             </div>
           </div>
         </div>
@@ -1027,7 +1214,7 @@ runbook stop dev</code></pre>
     <!-- HTTP SERVER -->
     <section id="http-server">
       <h2>Shared MCP server</h2>
-      <p>By default Runbook runs in stdio mode, which works great for a single AI session. Run it in HTTP mode and multiple sessions connect to the same instance simultaneously, sharing state, daemons, and logs.</p>
+      <p>By default Runbook runs in stdio mode. One process per AI session, no shared state. HTTP mode changes that: a single server runs continuously and every client connects to the same process. When a server is running, CLI commands automatically detect it and proxy through it, so your terminal and every AI session are hitting the same running process.</p>
       <div class="http-layout">
         <div>
 <pre><code><span class="yc"># Start once, connect from anywhere</span>
@@ -1035,17 +1222,18 @@ runbook -serve -config .dev_workflow.yaml
 
 <span class="yc"># or on a custom port</span>
 runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
-          <p style="margin-top:0.75rem">Then point each MCP client at <code>http://localhost:9000</code>. All sessions see the same tasks, the same running daemons, and the same log history.</p>
+          <p style="margin-top:0.75rem">Point each MCP client at <code>http://localhost:9000</code>. All sessions share the same tasks, running daemons, and log history. <code>runbook run build</code> from your terminal proxies through the same server the AI is using.</p>
+          <p style="margin-top:0.75rem; font-size:0.875rem">When multiple AI sessions trigger the same one-shot task with identical parameters simultaneously, Runbook deduplicates the execution. One run happens and both sessions receive the result. No redundant builds, no wasted compute.</p>
         </div>
         <div class="http-callout">
           <h3>Why this matters</h3>
-          <p>Stdio mode starts a new process per client. HTTP mode runs one process that all clients share.</p>
+          <p>Stdio mode starts a new process per client. HTTP mode runs one process all clients share.</p>
           <div class="http-clients">
             <div class="http-client"><div class="http-dot"></div>Claude Code (terminal 1)</div>
             <div class="http-client"><div class="http-dot"></div>Claude Code (terminal 2)</div>
             <div class="http-client"><div class="http-dot"></div>Claude Desktop</div>
           </div>
-          <p style="margin-top:0.85rem; font-size:0.82rem">All three see the same daemon state. If one session starts <code>dev</code>, another can check its logs or stop it.</p>
+          <p style="margin-top:0.85rem; font-size:0.82rem">All three see the same daemon state. If one session starts <code>api</code>, another can check its logs or stop it. The <code>refresh_config</code> MCP tool lets any session reload the config without restarting the server. Running daemons are not disrupted.</p>
         </div>
       </div>
     </section>
@@ -1053,29 +1241,30 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
     <!-- TASK TYPES -->
     <section id="tasks">
       <h2>Task Types</h2>
-      <p>Every task has a <code>type</code> that controls how Runbook manages its lifecycle.</p>
+      <p>Every task has a <code>type</code> that controls how Runbook manages its lifecycle. Tasks can also be marked <code>disable_mcp: true</code> to make them CLI-only. Useful for internal or privileged tasks you want humans to run explicitly but don't want exposed to AI sessions.</p>
       <div class="task-types">
 
         <div class="task-type-card">
           <h3>Oneshot</h3>
           <div class="type-badge oneshot">type: oneshot</div>
-          <p>Runs a command and returns the output when it exits. Use for build, test, lint, format. Anything with a clear beginning and end.</p>
+          <p>Runs a command and returns the output when it exits. Use for build, test, lint, format. Anything that wraps an existing tool with a clear beginning and end.</p>
 <pre><code><span class="yk">tasks</span>:
   <span class="yk">test</span>:
-    <span class="yk">description</span>: <span class="ys">"Run tests"</span>
-    <span class="yk">command</span>: <span class="ys">"go test ./..."</span>
+    <span class="yk">description</span>: <span class="ys">"Run test suite"</span>
+    <span class="yk">command</span>: <span class="ys">"make test"</span>
     <span class="yk">type</span>: <span class="ys">oneshot</span>
+    <span class="yk">depends_on</span>: [<span class="ys">lint</span>]
     <span class="yk">timeout</span>: <span class="yn">120</span></code></pre>
         </div>
 
         <div class="task-type-card">
           <h3>Daemon</h3>
           <div class="type-badge daemon">type: daemon</div>
-          <p>Starts a long-running background process. Runbook registers separate <code>start</code>, <code>stop</code>, <code>status</code>, and <code>logs</code> MCP tools for each daemon.</p>
+          <p>Starts a long-running background process. Runbook registers separate <code>start</code>, <code>stop</code>, <code>status</code>, and <code>logs</code> MCP tools for each daemon automatically.</p>
 <pre><code><span class="yk">tasks</span>:
-  <span class="yk">server</span>:
-    <span class="yk">description</span>: <span class="ys">"Start API server"</span>
-    <span class="yk">command</span>: <span class="ys">"go run ./cmd/server"</span>
+  <span class="yk">api</span>:
+    <span class="yk">description</span>: <span class="ys">"API dev server"</span>
+    <span class="yk">command</span>: <span class="ys">"make dev"</span>
     <span class="yk">type</span>: <span class="ys">daemon</span>
     <span class="yk">working_directory</span>: <span class="ys">"/path/to/project"</span></code></pre>
         </div>
@@ -1086,7 +1275,7 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
     <!-- PARAMETERS -->
     <section id="parameters">
       <h2>Parameters</h2>
-      <p>Tasks can accept parameters using Go template syntax. The AI assistant fills in the values automatically based on the parameter schema you define.</p>
+      <p>Tasks accept parameters using Go template syntax. The AI fills in values automatically based on the parameter schema you define. Each parameter becomes a field in the MCP tool schema with its <code>description</code> shown to the AI.</p>
 <pre><code><span class="yk">tasks</span>:
   <span class="yk">deploy</span>:
     <span class="yk">description</span>: <span class="ys">"Deploy to an environment"</span>
@@ -1102,14 +1291,13 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
         <span class="yk">required</span>: <span class="yb">false</span>
         <span class="yk">description</span>: <span class="ys">"Version to deploy"</span>
         <span class="yk">default</span>: <span class="ys">"latest"</span></code></pre>
-      <p>Each parameter becomes a field in the MCP tool schema, with its <code>description</code> shown to the AI. Required parameters must be provided; optional ones fall back to <code>default</code>.</p>
-      <p>You can also expose the task's working directory as a parameter using <code>expose_working_directory: true</code>. A useful way to make commands more flexible.</p>
+      <p>Set <code>expose_working_directory: true</code> to add a <code>working_directory</code> parameter to the MCP tool at runtime. This makes tasks reusable across different project paths without hardcoding a directory in the config.</p>
     </section>
 
     <!-- WORKFLOWS -->
     <section id="workflows">
       <h2>Workflows</h2>
-      <p>Workflows run multiple tasks in sequence with a single MCP tool call. Steps share optional parameters via template substitution, and individual steps can be marked <code>continue_on_failure</code> to keep the pipeline running even if they fail.</p>
+      <p>Workflows run multiple tasks in sequence with a single MCP tool call. Steps share optional parameters via template substitution, and individual steps can be marked <code>continue_on_failure</code> to keep the pipeline running even if they fail. Use <code>depends_on</code> on individual tasks to declare dependencies that are resolved automatically before the task runs, even when called outside a workflow.</p>
 <pre><code><span class="yk">workflows</span>:
   <span class="yk">ci</span>:
     <span class="yk">description</span>: <span class="ys">"Full CI pipeline"</span>
@@ -1118,7 +1306,60 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
       - <span class="yk">task</span>: <span class="ys">test</span>
       - <span class="yk">task</span>: <span class="ys">build</span>
         <span class="yk">continue_on_failure</span>: <span class="yb">true</span></code></pre>
-      <p>Runbook exposes each workflow as a single MCP tool named <code>workflow_{name}</code>. The AI can run your entire CI pipeline with one call.</p>
+      <p>Runbook exposes each workflow as a single MCP tool named <code>run_workflow_{name}</code>. The AI can run your entire CI pipeline with one call.</p>
+    </section>
+
+    <!-- MCP PROMPTS -->
+    <section id="prompts">
+      <h2>MCP Prompts</h2>
+      <p>Prompts are templated text resources that give AI assistants a playbook for your project. Not just what tools exist, but how to use them, in what order, and for what purpose. Define them under the <code>prompts</code> key using Go template syntax to reference your tasks by name.</p>
+<pre><code><span class="yk">prompts</span>:
+  <span class="yk">dev-workflow</span>:
+    <span class="yk">description</span>: <span class="ys">"How to develop and test this project"</span>
+    <span class="yk">content</span>: |
+      <span class="ys">Development workflow for this project:</span>
+
+      <span class="ys">1. Bootstrap the environment: run the setup workflow</span>
+      <span class="ys">2. Start backend: <span class="tp">{{.Tasks.api.Start}}</span></span>
+      <span class="ys">3. Start frontend: <span class="tp">{{.Tasks.frontend-dev.Start}}</span></span>
+      <span class="ys">4. Run before committing: <span class="tp">{{.Tasks.ci.Run}}</span></span>
+      <span class="ys">5. Deploy to staging: <span class="tp">{{.Tasks.deploy.Run}}</span> with env=staging</span>
+
+      <span class="ys">To check server health: <span class="tp">{{.Tasks.api.Status}}</span></span>
+      <span class="ys">To tail server logs:   <span class="tp">{{.Tasks.api.Logs}}</span></span></code></pre>
+      <p>The template variables resolve to actual MCP tool names. <code><span class="tp">{{.Tasks.api.Start}}</span></code> becomes <code>start_api</code>, <code><span class="tp">{{.Tasks.ci.Run}}</span></code> becomes <code>run_workflow_ci</code>. The AI receives concrete tool names it can call directly, not vague descriptions.</p>
+      <p>Available template methods for each task: <code>.Run</code> (oneshot), <code>.Start</code> / <code>.Stop</code> / <code>.Status</code> / <code>.Logs</code> (daemon), <code>.Desc</code> (description text).</p>
+    </section>
+
+    <!-- MCP RESOURCES -->
+    <section id="resources">
+      <h2>MCP Resources</h2>
+      <p>Runbook exposes several built-in MCP resources that give AI deep context about your project structure:</p>
+      <table style="margin-bottom:1.5rem">
+        <thead>
+          <tr><th>URI</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>dev-workflow://task-groups</code></td><td>All task groups and their member tasks, as JSON.</td></tr>
+          <tr><td><code>dev-workflow://task-dependencies</code></td><td>Task dependency graph showing which tasks depend on which others.</td></tr>
+          <tr><td><code>dev-workflow://docs/templates</code></td><td>Complete guide to prompt and command template syntax.</td></tr>
+          <tr><td><code>dev-workflow://docs/configuration</code></td><td>Full configuration reference with examples.</td></tr>
+        </tbody>
+      </table>
+      <p>Add your own custom resources under the <code>resources</code> key with either inline <code>content</code> or a <code>file</code> path. Custom resources also support template variables, so you can reference task names dynamically.</p>
+<pre><code><span class="yk">resources</span>:
+  <span class="yk">architecture</span>:
+    <span class="yk">description</span>: <span class="ys">"Project structure and tooling overview"</span>
+    <span class="yk">content</span>: |
+      <span class="ys">Backend: Go API in ./cmd/server, managed via Makefile</span>
+      <span class="ys">Frontend: React SPA in ./frontend, managed via npm</span>
+      <span class="ys">Infrastructure: Postgres + Redis, managed via docker compose</span>
+
+  <span class="yk">deployment-guide</span>:
+    <span class="yk">description</span>: <span class="ys">"How to deploy this service"</span>
+    <span class="yk">file</span>: <span class="ys">"./docs/deployment.md"</span>
+    <span class="yk">mime_type</span>: <span class="ys">"text/markdown"</span></code></pre>
+      <p>Custom resources are mounted at <code>dev-workflow://custom/{name}</code> and are accessible to any AI session connected to the server.</p>
     </section>
 
     <!-- REFERENCE -->
@@ -1137,9 +1378,9 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
             <tr><td><code>defaults</code></td><td>Default <code>timeout</code> (seconds), <code>shell</code>, and <code>env</code> applied to every task unless overridden.</td></tr>
             <tr><td><code>tasks</code></td><td>Map of named tasks. Each key becomes an MCP tool name.</td></tr>
             <tr><td><code>workflows</code></td><td>Map of named multi-step workflows that chain tasks sequentially.</td></tr>
-            <tr><td><code>task_groups</code></td><td>Named collections of tasks for organizational grouping.</td></tr>
-            <tr><td><code>prompts</code></td><td>Templated prompts exposed as MCP prompt resources to AI assistants.</td></tr>
-            <tr><td><code>resources</code></td><td>Custom MCP resources with inline <code>content</code> or a <code>file</code> path.</td></tr>
+            <tr><td><code>task_groups</code></td><td>Named collections of tasks with a <code>description</code> and <code>tasks</code> list. Exposed via the <code>dev-workflow://task-groups</code> MCP resource.</td></tr>
+            <tr><td><code>prompts</code></td><td>Templated prompts exposed as MCP prompt resources. Use Go template syntax to reference task tool names dynamically.</td></tr>
+            <tr><td><code>resources</code></td><td>Custom MCP resources with inline <code>content</code> or a <code>file</code> path. Optionally set <code>mime_type</code>.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1152,15 +1393,16 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
           </thead>
           <tbody>
             <tr><td><code>description</code></td><td>Human-readable description shown to the AI in the tool schema.</td></tr>
-            <tr><td><code>command</code></td><td>Shell command to run. Supports <code>{{.param}}</code> Go template substitution.</td></tr>
+            <tr><td><code>command</code></td><td>Shell command to run. Can be any tool: <code>make build</code>, <code>npm test</code>, <code>docker compose up -d</code>, etc. Supports <code>{{.param}}</code> Go template substitution.</td></tr>
             <tr><td><code>type</code></td><td><code>oneshot</code> runs and exits. <code>daemon</code> is a long-running background process.</td></tr>
             <tr><td><code>working_directory</code></td><td>Set a fixed working directory for the command.</td></tr>
-            <tr><td><code>expose_working_directory</code></td><td>If <code>true</code>, adds a <code>working_directory</code> parameter to the MCP tool so the caller can set it at runtime.</td></tr>
+            <tr><td><code>expose_working_directory</code></td><td>If <code>true</code>, adds a <code>working_directory</code> parameter to the MCP tool so the caller can override it at runtime. Useful for reusable tasks across different project paths.</td></tr>
             <tr><td><code>env</code></td><td>Map of environment variables set for this task only.</td></tr>
             <tr><td><code>timeout</code></td><td>Timeout in seconds. Overrides the value in <code>defaults</code>.</td></tr>
             <tr><td><code>shell</code></td><td>Shell binary used to run the command (e.g. <code>/bin/zsh</code>). Overrides the value in <code>defaults</code>.</td></tr>
             <tr><td><code>parameters</code></td><td>Named parameters with <code>type</code>, <code>required</code>, <code>description</code>, and optional <code>default</code>.</td></tr>
-            <tr><td><code>depends_on</code></td><td>List of task names that must complete successfully before this task runs.</td></tr>
+            <tr><td><code>depends_on</code></td><td>List of task names that must complete successfully before this task runs. Dependencies are resolved automatically regardless of how the task is invoked.</td></tr>
+            <tr><td><code>disable_mcp</code></td><td>If <code>true</code>, the task is excluded from MCP tool registration. It remains available via the CLI but is not visible to AI sessions.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1180,7 +1422,7 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
             <tr><td><code>runbook logs &lt;task&gt; [--lines=N] [--filter=REGEX] [--session=ID]</code></td><td>Print task log output. Defaults to the latest session.</td></tr>
           </tbody>
         </table>
-        <p style="margin-top:0.75rem;font-size:0.875rem">All subcommands accept <code>--config=&lt;path&gt;</code> to specify a config file or directory.</p>
+        <p style="margin-top:0.75rem;font-size:0.875rem">All subcommands accept <code>--config=&lt;path&gt;</code> to specify a config file or directory. When a server is running in HTTP mode, commands automatically detect and proxy through it.</p>
       </div>
 
       <div class="ref-section">
@@ -1191,9 +1433,22 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
           </thead>
           <tbody>
             <tr><td><code>-config &lt;path&gt;</code></td><td>Path to a config file or directory. If omitted, Runbook looks for <code>.dev_workflow.yaml</code> or <code>.dev_workflow/</code> in the current directory.</td></tr>
-            <tr><td><code>-init</code></td><td>Create a minimal <code>.dev_workflow.yaml</code> in the current directory and exit.</td></tr>
-            <tr><td><code>-serve</code></td><td>Run as a standalone HTTP server instead of stdio MCP mode.</td></tr>
+            <tr><td><code>-init</code></td><td>Create a minimal <code>.dev_workflow.yaml</code> in the current directory and exit. Also available as the <code>init</code> MCP tool. When no config exists, the AI can call it to scaffold a starter config and bootstrap the entire setup from within a session.</td></tr>
+            <tr><td><code>-serve</code></td><td>Run as a standalone HTTP server instead of stdio MCP mode. Enables shared state, CLI auto-proxy, and execution deduplication across sessions.</td></tr>
             <tr><td><code>-addr &lt;addr&gt;</code></td><td>Listen address for HTTP mode (default: <code>:8080</code>).</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="ref-section">
+        <h3>Built-in MCP tools</h3>
+        <table>
+          <thead>
+            <tr><th>Tool</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>init</code></td><td>Create a starter <code>.dev_workflow.yaml</code> from within an AI session. Accepts optional <code>path</code> and <code>overwrite</code> parameters.</td></tr>
+            <tr><td><code>refresh_config</code></td><td>Reload all configuration from disk without restarting the server. Re-registers tools, resources, and prompts. Running daemons are not disrupted. Lets AI pick up config edits immediately.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1208,6 +1463,22 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
   </footer>
 
   <script>
+    function toggleNav() {
+      document.getElementById('site-nav').classList.toggle('mobile-open');
+    }
+
+    function closeNav() {
+      document.getElementById('site-nav').classList.remove('mobile-open');
+    }
+
+    // Close menu when clicking outside
+    document.addEventListener('click', function(e) {
+      var nav = document.getElementById('site-nav');
+      if (nav.classList.contains('mobile-open') && !nav.contains(e.target)) {
+        nav.classList.remove('mobile-open');
+      }
+    });
+
     function copyInstall(btn, text) {
       navigator.clipboard.writeText(text).then(() => {
         btn.classList.add('copied');
