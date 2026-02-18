@@ -16,6 +16,9 @@ func (s *Server) registerTools() {
 
 	// Register task-specific tools
 	for taskName, taskDef := range s.manifest.Tasks {
+		if taskDef.DisableMCP {
+			continue
+		}
 		switch taskDef.Type {
 		case config.TaskTypeOneShot:
 			s.registerOneShotTool(taskName, taskDef)

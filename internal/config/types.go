@@ -34,6 +34,7 @@ type Task struct {
 	Shell                  string            `yaml:"shell"`
 	Parameters             map[string]Param  `yaml:"parameters"`
 	DependsOn              []string          `yaml:"depends_on"`
+	DisableMCP             bool              `yaml:"disable_mcp,omitempty"`
 }
 
 // Param represents a task parameter definition

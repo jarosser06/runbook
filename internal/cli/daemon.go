@@ -25,7 +25,7 @@ func newStartCmd() *cobra.Command {
 			if err := applyWorkingDir(); err != nil {
 				return err
 			}
-			if !globalLocal {
+			if !globalLocal && isMCPEnabled(remaining) {
 				if code, handled := tryRemoteExecute("start", remaining); handled {
 					if code != 0 {
 						return &exitError{code: code}
@@ -47,6 +47,12 @@ func newStopCmd() *cobra.Command {
 		Short: "Stop a daemon",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !globalLocal && !isMCPEnabled(args) {
+				if code := cmdStop(args[0]); code != 0 {
+					return &exitError{code: code}
+				}
+				return nil
+			}
 			return runWithRemoteFallback("stop", args, func(a []string) int {
 				return cmdStop(a[0])
 			})
@@ -60,6 +66,12 @@ func newStatusCmd() *cobra.Command {
 		Short: "Show daemon status",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !globalLocal && !isMCPEnabled(args) {
+				if code := cmdStatus(args[0]); code != 0 {
+					return &exitError{code: code}
+				}
+				return nil
+			}
 			return runWithRemoteFallback("status", args, func(a []string) int {
 				return cmdStatus(a[0])
 			})

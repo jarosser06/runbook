@@ -98,6 +98,24 @@ tasks:
 			},
 		},
 		{
+			name: "task with disable_mcp",
+			yaml: `version: "1.0"
+tasks:
+  secret-setup:
+    description: "Setup secrets"
+    command: "./setup.sh"
+    type: oneshot
+    disable_mcp: true
+`,
+			wantError: false,
+			validate: func(t *testing.T, m *Manifest) {
+				task := m.Tasks["secret-setup"]
+				if !task.DisableMCP {
+					t.Error("expected DisableMCP=true")
+				}
+			},
+		},
+		{
 			name:      "invalid yaml",
 			yaml:      `this is not: valid: yaml:`,
 			wantError: true,

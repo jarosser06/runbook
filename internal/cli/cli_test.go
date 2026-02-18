@@ -744,6 +744,56 @@ func TestParseTaskParamsNoParams(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// isMCPEnabled tests
+// ---------------------------------------------------------------------------
+
+func TestIsMCPEnabled(t *testing.T) {
+	// Create a temp dir with a manifest containing a disable_mcp task.
+	tmp := t.TempDir()
+	origDir, _ := os.Getwd()
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	manifest := `version: "1.0"
+tasks:
+  setup-secrets:
+    description: "Configure credentials"
+    command: "./scripts/setup-secrets.sh"
+    type: oneshot
+    disable_mcp: true
+  build:
+    description: "Build the project"
+    command: "go build ./..."
+    type: oneshot
+`
+	if err := os.WriteFile(filepath.Join(tmp, ".dev_workflow.yaml"), []byte(manifest), 0644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	resetGlobals(t)
+
+	tests := []struct {
+		args []string
+		want bool
+	}{
+		{[]string{}, true},                        // no task name -> enabled
+		{[]string{"build"}, true},                 // normal task -> enabled
+		{[]string{"setup-secrets"}, false},        // disable_mcp task -> not enabled
+		{[]string{"nonexistent"}, true},           // unknown task -> enabled (pass through)
+		{[]string{"setup-secrets", "--foo"}, false}, // extra args don't matter; first arg checked
+	}
+
+	for _, tt := range tests {
+		got := isMCPEnabled(tt.args)
+		if got != tt.want {
+			t.Errorf("isMCPEnabled(%v) = %v, want %v", tt.args, got, tt.want)
+		}
+	}
+}
+
 func TestFormatDuration(t *testing.T) {
 	tests := []struct {
 		name string

@@ -235,6 +235,28 @@ func parseTaskParams(taskDef config.Task, args []string) (map[string]interface{}
 	return params, nil
 }
 
+// isMCPEnabled returns false when the first arg names a task that has
+// disable_mcp: true, indicating the task should bypass any running server and
+// execute locally. Returns true on any error or when no task matches.
+//
+// This must use config.LoadManifest directly rather than bootstrap to avoid
+// creating a process.Manager, which calls restoreFromPIDFiles() and would kill
+// any currently-running daemons whose PID files it finds.
+func isMCPEnabled(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	taskName := args[0]
+	manifest, loaded, err := config.LoadManifest(globalConfig)
+	if err != nil || !loaded {
+		return true // no config available; let remote handle it
+	}
+	if t, exists := manifest.Tasks[taskName]; exists && t.DisableMCP {
+		return false
+	}
+	return true
+}
+
 // applyWorkingDir changes to the configured working directory if set.
 func applyWorkingDir() error {
 	if globalWorkingDir != "" {

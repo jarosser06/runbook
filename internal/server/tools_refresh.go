@@ -99,6 +99,9 @@ func (s *Server) collectToolNames() []string {
 
 	// Task-derived tools
 	for taskName, taskDef := range s.manifest.Tasks {
+		if taskDef.DisableMCP {
+			continue
+		}
 		switch taskDef.Type {
 		case config.TaskTypeOneShot:
 			names = append(names, "run_"+taskName)

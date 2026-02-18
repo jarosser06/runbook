@@ -47,6 +47,41 @@ func TestCollectToolNamesExcludesRefreshConfig(t *testing.T) {
 	}
 }
 
+func TestCollectToolNamesExcludesDisableMCPTasks(t *testing.T) {
+	manifest := &config.Manifest{
+		Tasks: map[string]config.Task{
+			"build":        {Type: config.TaskTypeOneShot, Command: "go build"},
+			"secret-setup": {Type: config.TaskTypeOneShot, Command: "./setup.sh", DisableMCP: true},
+			"serve":        {Type: config.TaskTypeDaemon, Command: "go run ."},
+			"priv-daemon":  {Type: config.TaskTypeDaemon, Command: "./daemon.sh", DisableMCP: true},
+		},
+		Workflows: map[string]config.Workflow{},
+		Prompts:   map[string]config.Prompt{},
+	}
+
+	s := &Server{manifest: manifest}
+	names := s.collectToolNames()
+
+	nameSet := make(map[string]bool, len(names))
+	for _, n := range names {
+		nameSet[n] = true
+	}
+
+	// disable_mcp tasks must not appear
+	for _, absent := range []string{"run_secret-setup", "start_priv-daemon", "stop_priv-daemon", "status_priv-daemon", "logs_priv-daemon"} {
+		if nameSet[absent] {
+			t.Errorf("collectToolNames() must not include %q for disable_mcp task", absent)
+		}
+	}
+
+	// Normal tasks must still appear
+	for _, present := range []string{"run_build", "start_serve", "stop_serve", "status_serve", "logs_serve"} {
+		if !nameSet[present] {
+			t.Errorf("collectToolNames() missing expected name %q", present)
+		}
+	}
+}
+
 // buildOneShotToolSchema tests the schema building logic directly
 func buildOneShotToolSchema(task config.Task) mcp.ToolInputSchema {
 	inputSchema := mcp.ToolInputSchema{

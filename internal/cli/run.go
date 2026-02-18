@@ -28,7 +28,7 @@ func newRunCmd() *cobra.Command {
 			if err := applyWorkingDir(); err != nil {
 				return err
 			}
-			if !globalLocal {
+			if !globalLocal && isMCPEnabled(remaining) {
 				if code, handled := tryRemoteExecute("run", remaining); handled {
 					if code != 0 {
 						return &exitError{code: code}
