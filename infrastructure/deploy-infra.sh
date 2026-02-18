@@ -82,7 +82,6 @@ ensure_certificate() {
     CERT_ARN=$(aws acm request-certificate \
       --region "$CERT_REGION" \
       --domain-name "$DOMAIN" \
-      --subject-alternative-names "www.${DOMAIN}" \
       --validation-method DNS \
       --query 'CertificateArn' \
       --output text)
@@ -94,28 +93,25 @@ ensure_certificate() {
 
   # Wait for validation records to appear
   echo "  Waiting for DNS validation records..."
-  local record_name=""
-  local record_value=""
   local attempts=0
-  while [ -z "$record_name" ] || [ "$record_name" = "None" ]; do
+  local all_ready=false
+  while [ "$all_ready" = false ]; do
     if [ $attempts -ge 12 ]; then
       echo "ERROR: Timed out waiting for ACM validation records."
       exit 1
     fi
-    record_name=$(aws acm describe-certificate \
+    pending=$(aws acm describe-certificate \
       --region "$CERT_REGION" \
       --certificate-arn "$CERT_ARN" \
-      --query 'Certificate.DomainValidationOptions[0].ResourceRecord.Name' \
+      --query 'Certificate.DomainValidationOptions[?ResourceRecord.Name==null].DomainName' \
       --output text 2>/dev/null || true)
-    attempts=$((attempts + 1))
-    [ -z "$record_name" ] || [ "$record_name" = "None" ] && sleep 5
+    if [ -z "$pending" ]; then
+      all_ready=true
+    else
+      attempts=$((attempts + 1))
+      sleep 5
+    fi
   done
-
-  record_value=$(aws acm describe-certificate \
-    --region "$CERT_REGION" \
-    --certificate-arn "$CERT_ARN" \
-    --query 'Certificate.DomainValidationOptions[0].ResourceRecord.Value' \
-    --output text)
 
   # Try to validate via Route53 automatically
   local zone_id
@@ -124,10 +120,26 @@ ensure_certificate() {
     --output text | sed 's|/hostedzone/||')
 
   if [ -n "$zone_id" ]; then
-    echo "  Found Route53 hosted zone (${zone_id}). Adding validation record..."
+    echo "  Found Route53 hosted zone (${zone_id}). Adding validation records..."
+    # Build change batch for all unique validation CNAMEs
+    changes=$(aws acm describe-certificate \
+      --region "$CERT_REGION" \
+      --certificate-arn "$CERT_ARN" \
+      --query 'Certificate.DomainValidationOptions[].ResourceRecord' \
+      --output json | python3 -c "
+import json, sys
+records = json.load(sys.stdin)
+seen = set()
+changes = []
+for r in records:
+    if r['Name'] not in seen:
+        seen.add(r['Name'])
+        changes.append({'Action':'UPSERT','ResourceRecordSet':{'Name':r['Name'],'Type':'CNAME','TTL':300,'ResourceRecords':[{'Value':r['Value']}]}})
+print(json.dumps({'Changes': changes}))
+")
     aws route53 change-resource-record-sets \
       --hosted-zone-id "$zone_id" \
-      --change-batch "{\"Changes\":[{\"Action\":\"UPSERT\",\"ResourceRecordSet\":{\"Name\":\"${record_name}\",\"Type\":\"CNAME\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"${record_value}\"}]}}]}" \
+      --change-batch "$changes" \
       --query 'ChangeInfo.Status' \
       --output text > /dev/null
     echo "  Waiting for certificate validation (takes a few minutes)..."
@@ -138,10 +150,12 @@ ensure_certificate() {
   else
     echo ""
     echo "  ERROR: '${DOMAIN}' is not managed by Route53 in this account."
-    echo "  Add this DNS CNAME record to validate the certificate, then re-run:"
-    echo ""
-    echo "    Name:  ${record_name}"
-    echo "    Value: ${record_value}"
+    echo "  Add DNS CNAME records to validate the certificate, then re-run:"
+    aws acm describe-certificate \
+      --region "$CERT_REGION" \
+      --certificate-arn "$CERT_ARN" \
+      --query 'Certificate.DomainValidationOptions[].ResourceRecord' \
+      --output table
     echo ""
     echo "  Certificate ARN (use --cert-arn once validated):"
     echo "    ${CERT_ARN}"
@@ -152,6 +166,20 @@ ensure_certificate() {
 ensure_certificate
 echo ""
 
+# ---- Look up hosted zone -----------------------------------------------------
+
+ZONE_ID=$(aws route53 list-hosted-zones \
+  --query "HostedZones[?Name=='${DOMAIN}.'].Id" \
+  --output text | sed 's|/hostedzone/||')
+
+if [ -z "$ZONE_ID" ]; then
+  echo "ERROR: No Route53 hosted zone found for ${DOMAIN}"
+  exit 1
+fi
+
+echo "Hosted zone: ${ZONE_ID}"
+echo ""
+
 # ---- Deploy CloudFormation --------------------------------------------------
 
 echo "Deploying CloudFormation stack..."
@@ -160,9 +188,10 @@ aws cloudformation deploy \
   --stack-name "${STACK_NAME}" \
   --template-file "${TEMPLATE_FILE}" \
   --parameter-overrides \
-    "ParameterKey=Environment,ParameterValue=${ENV}" \
-    "ParameterKey=AcmCertificateArn,ParameterValue=${CERT_ARN}" \
-  --capabilities CAPABILITY_IAM \
+    "Environment=${ENV}" \
+    "AcmCertificateArn=${CERT_ARN}" \
+    "HostedZoneId=${ZONE_ID}" \
+  --capabilities CAPABILITY_NAMED_IAM \
   --no-fail-on-empty-changeset
 
 echo "Stack deployed successfully."
