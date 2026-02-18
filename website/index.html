@@ -1176,17 +1176,15 @@ runbook stop api</code></pre>
           <div class="step-content">
             <div class="step-label">Step 3</div>
             <h3>Add to your MCP client</h3>
-            <p>Point your MCP client (Claude Desktop, Claude Code, or any compatible tool) at the runbook binary and your config file.</p>
+            <p>Point your MCP client (Claude Desktop, Claude Code, or any compatible tool) at the runbook binary. Runbook discovers your config automatically — it looks for <code>.dev_workflow.yaml</code> or a <code>.dev_workflow/</code> directory in the working directory.</p>
             <span class="fi">.mcp.json</span>
 <pre><code>{
   <span class="yk">"mcpServers"</span>: {
     <span class="yk">"runbook"</span>: {
-      <span class="yk">"command"</span>: <span class="ys">"/path/to/runbook"</span>,
-      <span class="yk">"args"</span>: [<span class="ys">"-config"</span>, <span class="ys">".dev_workflow.yaml"</span>]
+      <span class="yk">"command"</span>: <span class="ys">"/path/to/runbook"</span>
     }
   }
 }</code></pre>
-            <p>Runbook discovers config automatically in the current directory if you omit <code>-config</code>. It looks for <code>.dev_workflow.yaml</code> or a <code>.dev_workflow/</code> directory.</p>
           </div>
         </div>
 

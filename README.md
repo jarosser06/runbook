@@ -107,7 +107,6 @@ Add to your `.mcp.json`:
 {
   "mcpServers": {
     "runbook": {
-      "args": ["-config", "/path/to/your/mcp-tasks.yaml"],
       "command": "/path/to/runbook"
     }
   }
