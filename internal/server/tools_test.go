@@ -241,3 +241,180 @@ func TestToolSchemaWithExposeWorkingDirectory(t *testing.T) {
 		})
 	}
 }
+
+func TestTruncateToLines(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		max           int
+		wantShown     int
+		wantTotal     int
+		wantTruncated bool
+	}{
+		{
+			name:          "empty string",
+			input:         "",
+			max:           100,
+			wantShown:     0,
+			wantTotal:     0,
+			wantTruncated: false,
+		},
+		{
+			name:          "single line",
+			input:         "hello",
+			max:           100,
+			wantShown:     1,
+			wantTotal:     1,
+			wantTruncated: false,
+		},
+		{
+			name:          "exactly max lines",
+			input:         "a\nb\nc",
+			max:           3,
+			wantShown:     3,
+			wantTotal:     3,
+			wantTruncated: false,
+		},
+		{
+			name:          "over max lines",
+			input:         "a\nb\nc\nd\ne",
+			max:           3,
+			wantShown:     3,
+			wantTotal:     5,
+			wantTruncated: true,
+		},
+		{
+			name:          "max=0 means no truncation",
+			input:         "a\nb\nc",
+			max:           0,
+			wantShown:     3,
+			wantTotal:     3,
+			wantTruncated: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, shown, total := truncateToLines(tt.input, tt.max)
+			if shown != tt.wantShown {
+				t.Errorf("shown=%d, want %d", shown, tt.wantShown)
+			}
+			if total != tt.wantTotal {
+				t.Errorf("total=%d, want %d", total, tt.wantTotal)
+			}
+			truncated := total > shown
+			if truncated != tt.wantTruncated {
+				t.Errorf("truncated=%v, want %v", truncated, tt.wantTruncated)
+			}
+			_ = result
+		})
+	}
+}
+
+func TestTruncateToLinesKeepsLastLines(t *testing.T) {
+	// Verify that when truncating, we keep the LAST lines (newest output)
+	input := "line1\nline2\nline3\nline4\nline5"
+	result, shown, total := truncateToLines(input, 3)
+	if total != 5 {
+		t.Errorf("expected total=5, got %d", total)
+	}
+	if shown != 3 {
+		t.Errorf("expected shown=3, got %d", shown)
+	}
+	if result != "line3\nline4\nline5" {
+		t.Errorf("expected last 3 lines, got %q", result)
+	}
+}
+
+func TestDaemonLogsSchemaHasOffsetParam(t *testing.T) {
+	schema := daemonLogsInputSchema()
+	offsetParam, ok := schema.Properties["offset"]
+	if !ok {
+		t.Fatal("daemon logs schema missing 'offset' parameter")
+	}
+	offsetMap, ok := offsetParam.(map[string]interface{})
+	if !ok {
+		t.Fatal("offset param is not a map")
+	}
+	if offsetMap["type"] != "number" {
+		t.Errorf("expected offset type=number, got %v", offsetMap["type"])
+	}
+}
+
+func TestSessionLogSchemaHasOffsetParam(t *testing.T) {
+	schema := sessionLogInputSchema()
+	offsetParam, ok := schema.Properties["offset"]
+	if !ok {
+		t.Fatal("session log schema missing 'offset' parameter")
+	}
+	offsetMap, ok := offsetParam.(map[string]interface{})
+	if !ok {
+		t.Fatal("offset param is not a map")
+	}
+	if offsetMap["type"] != "number" {
+		t.Errorf("expected offset type=number, got %v", offsetMap["type"])
+	}
+}
+
+func TestHasMoreCalculation(t *testing.T) {
+	tests := []struct {
+		name        string
+		totalLines  int
+		linesParam  int
+		offsetParam int
+		wantHasMore bool
+	}{
+		{
+			name:        "more lines available",
+			totalLines:  150,
+			linesParam:  100,
+			offsetParam: 0,
+			wantHasMore: true,
+		},
+		{
+			name:        "all lines fit",
+			totalLines:  50,
+			linesParam:  100,
+			offsetParam: 0,
+			wantHasMore: false,
+		},
+		{
+			name:        "with offset, more available",
+			totalLines:  300,
+			linesParam:  100,
+			offsetParam: 100,
+			wantHasMore: true,
+		},
+		{
+			name:        "with offset, nothing more",
+			totalLines:  200,
+			linesParam:  100,
+			offsetParam: 100,
+			wantHasMore: false,
+		},
+		{
+			name:        "lines=0 means all returned, never has_more",
+			totalLines:  50,
+			linesParam:  0,
+			offsetParam: 0,
+			wantHasMore: false,
+		},
+		{
+			name:        "lines=0 with offset, still no has_more",
+			totalLines:  50,
+			linesParam:  0,
+			offsetParam: 10,
+			wantHasMore: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hasMore := calcHasMore(tt.totalLines, tt.linesParam, tt.offsetParam)
+			if hasMore != tt.wantHasMore {
+				t.Errorf("totalLines=%d, lines=%d, offset=%d: hasMore=%v, want %v",
+					tt.totalLines, tt.linesParam, tt.offsetParam, hasMore, tt.wantHasMore)
+			}
+		})
+	}
+}

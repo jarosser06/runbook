@@ -177,7 +177,7 @@ func TestSessionBasedLoggingIntegration(t *testing.T) {
 	t.Logf("✓ ListSessions returned %d session(s)", len(sessions))
 
 	// Test reading logs through session
-	lines, err := logs.ReadSessionLog(result.SessionID, logs.ReadOptions{})
+	lines, _, err := logs.ReadSessionLog(result.SessionID, logs.ReadOptions{})
 	if err != nil {
 		t.Fatalf("Failed to read session log: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestSessionBasedLoggingIntegration(t *testing.T) {
 	t.Logf("✓ ReadSessionLog returned %d line(s)", len(lines))
 
 	// Test reading latest logs
-	latestLines, err := logs.ReadLog("test_session", logs.ReadOptions{})
+	latestLines, _, err := logs.ReadLog("test_session", logs.ReadOptions{})
 	if err != nil {
 		t.Fatalf("Failed to read latest log: %v", err)
 	}

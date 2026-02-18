@@ -112,10 +112,9 @@ func (s *Server) registerDaemonStatusTool(taskName string, task config.Task) {
 	s.mcpServer.AddTool(tool, handler)
 }
 
-func (s *Server) registerDaemonLogsTool(taskName string, task config.Task) {
-	toolName := "logs_" + taskName
-
-	inputSchema := mcp.ToolInputSchema{
+// daemonLogsInputSchema returns the input schema for a daemon logs tool.
+func daemonLogsInputSchema() mcp.ToolInputSchema {
+	return mcp.ToolInputSchema{
 		Type: "object",
 		Properties: map[string]interface{}{
 			"lines": map[string]interface{}{
@@ -130,8 +129,18 @@ func (s *Server) registerDaemonLogsTool(taskName string, task config.Task) {
 				"type":        "string",
 				"description": "Optional session ID to read logs from (default: latest)",
 			},
+			"offset": map[string]interface{}{
+				"type":        "number",
+				"description": "Skip the last N lines (for paging backwards through history)",
+			},
 		},
 	}
+}
+
+func (s *Server) registerDaemonLogsTool(taskName string, task config.Task) {
+	toolName := "logs_" + taskName
+
+	inputSchema := daemonLogsInputSchema()
 
 	tool := mcp.Tool{
 		Name:        toolName,
@@ -152,15 +161,20 @@ func (s *Server) registerDaemonLogsTool(taskName string, task config.Task) {
 		if sessionID, ok := args["session_id"].(string); ok {
 			opts.SessionID = sessionID
 		}
+		if offset, ok := args["offset"].(float64); ok {
+			opts.Offset = int(offset)
+		}
 
-		logLines, err := logs.ReadLog(taskName, opts)
+		logLines, totalLines, err := logs.ReadLog(taskName, opts)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to read logs: %v", err)), nil
 		}
 
 		result := map[string]interface{}{
-			"lines": logLines,
-			"count": len(logLines),
+			"lines":       logLines,
+			"count":       len(logLines),
+			"total_lines": totalLines,
+			"has_more":    calcHasMore(totalLines, opts.Lines, opts.Offset),
 		}
 
 		resultJSON, _ := json.Marshal(result)

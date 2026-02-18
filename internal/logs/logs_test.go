@@ -1,6 +1,7 @@
 package logs
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -284,7 +285,7 @@ func TestReadLog(t *testing.T) {
 	}
 
 	// Test reading all lines
-	lines, err := ReadLog("test-task", ReadOptions{})
+	lines, total, err := ReadLog("test-task", ReadOptions{})
 	if err != nil {
 		t.Fatalf("ReadLog failed: %v", err)
 	}
@@ -292,9 +293,12 @@ func TestReadLog(t *testing.T) {
 	if len(lines) != len(testLines) {
 		t.Errorf("expected %d lines, got %d", len(testLines), len(lines))
 	}
+	if total != len(testLines) {
+		t.Errorf("expected total %d, got %d", len(testLines), total)
+	}
 
 	// Test tailing
-	lines, err = ReadLog("test-task", ReadOptions{Lines: 2})
+	lines, _, err = ReadLog("test-task", ReadOptions{Lines: 2})
 	if err != nil {
 		t.Fatalf("ReadLog with tail failed: %v", err)
 	}
@@ -308,7 +312,7 @@ func TestReadLog(t *testing.T) {
 	}
 
 	// Test filtering
-	lines, err = ReadLog("test-task", ReadOptions{Filter: "error"})
+	lines, _, err = ReadLog("test-task", ReadOptions{Filter: "error"})
 	if err != nil {
 		t.Fatalf("ReadLog with filter failed: %v", err)
 	}
@@ -431,7 +435,7 @@ func TestReadLogNonExistent(t *testing.T) {
 	}
 
 	// Read non-existent log
-	lines, err := ReadLog("nonexistent", ReadOptions{})
+	lines, _, err := ReadLog("nonexistent", ReadOptions{})
 	if err != nil {
 		t.Fatalf("ReadLog should not fail for non-existent log: %v", err)
 	}
@@ -446,5 +450,187 @@ func TestFilterLinesInvalidRegex(t *testing.T) {
 	_, err := filterLines(lines, "[invalid")
 	if err == nil {
 		t.Errorf("expected error for invalid regex, got nil")
+	}
+}
+
+// setupLogDir sets up a temp log directory and returns a cleanup function.
+func setupLogDir(t *testing.T) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	})
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change directory: %v", err)
+	}
+	if err := Setup(); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+}
+
+// writeLogFile writes lines to the flat log file for taskName.
+func writeLogFile(t *testing.T, taskName string, lines []string) {
+	t.Helper()
+	content := strings.Join(lines, "\n")
+	if err := os.WriteFile(GetLogPath(taskName), []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write log file: %v", err)
+	}
+}
+
+func TestReadLogOffset(t *testing.T) {
+	setupLogDir(t)
+
+	// Write 50 numbered lines
+	var testLines []string
+	for i := 1; i <= 50; i++ {
+		testLines = append(testLines, fmt.Sprintf("line %d", i))
+	}
+	writeLogFile(t, "test-task", testLines)
+
+	// Lines=10, Offset=10: skip last 10, then tail 10 → lines 31–40
+	lines, total, err := ReadLog("test-task", ReadOptions{Lines: 10, Offset: 10})
+	if err != nil {
+		t.Fatalf("ReadLog failed: %v", err)
+	}
+	if total != 50 {
+		t.Errorf("expected total=50, got %d", total)
+	}
+	if len(lines) != 10 {
+		t.Errorf("expected 10 lines, got %d", len(lines))
+	}
+	if lines[0] != "line 31" || lines[9] != "line 40" {
+		t.Errorf("expected lines 31–40, got %v...%v", lines[0], lines[9])
+	}
+}
+
+func TestReadLogOffsetExceedsTotal(t *testing.T) {
+	setupLogDir(t)
+
+	var testLines []string
+	for i := 1; i <= 50; i++ {
+		testLines = append(testLines, fmt.Sprintf("line %d", i))
+	}
+	writeLogFile(t, "test-task", testLines)
+
+	lines, total, err := ReadLog("test-task", ReadOptions{Lines: 10, Offset: 100})
+	if err != nil {
+		t.Fatalf("ReadLog failed: %v", err)
+	}
+	if total != 50 {
+		t.Errorf("expected total=50, got %d", total)
+	}
+	if len(lines) != 0 {
+		t.Errorf("expected 0 lines when offset >= total, got %d", len(lines))
+	}
+}
+
+func TestReadLogTotalLines(t *testing.T) {
+	setupLogDir(t)
+
+	var testLines []string
+	for i := 1; i <= 200; i++ {
+		testLines = append(testLines, fmt.Sprintf("line %d", i))
+	}
+	writeLogFile(t, "test-task", testLines)
+
+	lines, total, err := ReadLog("test-task", ReadOptions{Lines: 10})
+	if err != nil {
+		t.Fatalf("ReadLog failed: %v", err)
+	}
+	if total != 200 {
+		t.Errorf("expected total=200, got %d", total)
+	}
+	if len(lines) != 10 {
+		t.Errorf("expected 10 lines, got %d", len(lines))
+	}
+}
+
+func TestReadLogFilterAndOffset(t *testing.T) {
+	setupLogDir(t)
+
+	// 10 INFO lines and 10 ERROR lines interleaved
+	var testLines []string
+	for i := 1; i <= 10; i++ {
+		testLines = append(testLines, fmt.Sprintf("INFO line %d", i))
+		testLines = append(testLines, fmt.Sprintf("ERROR line %d", i))
+	}
+	writeLogFile(t, "test-task", testLines)
+
+	// Filter to ERROR only (10 lines), offset=3, lines=3 → lines 4–6 from end after offset
+	lines, total, err := ReadLog("test-task", ReadOptions{Filter: "ERROR", Lines: 3, Offset: 3})
+	if err != nil {
+		t.Fatalf("ReadLog failed: %v", err)
+	}
+	// total is count after filter, before offset/tail
+	if total != 10 {
+		t.Errorf("expected total=10 after filter, got %d", total)
+	}
+	// After offset=3: 7 lines remain; tail 3 → last 3 of those
+	if len(lines) != 3 {
+		t.Errorf("expected 3 lines, got %d", len(lines))
+	}
+}
+
+func TestReadLogZeroLinesWithOffset(t *testing.T) {
+	setupLogDir(t)
+
+	var testLines []string
+	for i := 1; i <= 30; i++ {
+		testLines = append(testLines, fmt.Sprintf("line %d", i))
+	}
+	writeLogFile(t, "test-task", testLines)
+
+	// Lines=0 (all), Offset=5 → first 25 lines
+	lines, total, err := ReadLog("test-task", ReadOptions{Lines: 0, Offset: 5})
+	if err != nil {
+		t.Fatalf("ReadLog failed: %v", err)
+	}
+	if total != 30 {
+		t.Errorf("expected total=30, got %d", total)
+	}
+	if len(lines) != 25 {
+		t.Errorf("expected 25 lines (30 - offset 5), got %d", len(lines))
+	}
+}
+
+func TestReadSessionLogTotalLines(t *testing.T) {
+	setupLogDir(t)
+
+	sessionID := GenerateSessionID()
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		TaskName:  "test-task",
+		TaskType:  "oneshot",
+		StartTime: time.Now(),
+	}
+	writer, err := NewWriter(sessionID, metadata)
+	if err != nil {
+		t.Fatalf("NewWriter failed: %v", err)
+	}
+
+	var sb strings.Builder
+	for i := 1; i <= 50; i++ {
+		sb.WriteString(fmt.Sprintf("line %d\n", i))
+	}
+	if _, err := writer.Write([]byte(sb.String())); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	writer.Close()
+
+	lines, total, err := ReadSessionLog(sessionID, ReadOptions{Lines: 5})
+	if err != nil {
+		t.Fatalf("ReadSessionLog failed: %v", err)
+	}
+	if total != 50 {
+		t.Errorf("expected total=50, got %d", total)
+	}
+	if len(lines) != 5 {
+		t.Errorf("expected 5 lines, got %d", len(lines))
 	}
 }

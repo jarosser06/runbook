@@ -103,9 +103,9 @@ func (s *Server) registerReadSessionMetadataTool() {
 	s.mcpServer.AddTool(tool, handler)
 }
 
-// registerReadSessionLogTool registers the read_session_log tool
-func (s *Server) registerReadSessionLogTool() {
-	inputSchema := mcp.ToolInputSchema{
+// sessionLogInputSchema returns the input schema for the read_session_log tool.
+func sessionLogInputSchema() mcp.ToolInputSchema {
+	return mcp.ToolInputSchema{
 		Type: "object",
 		Properties: map[string]interface{}{
 			"session_id": map[string]interface{}{
@@ -114,15 +114,24 @@ func (s *Server) registerReadSessionLogTool() {
 			},
 			"lines": map[string]interface{}{
 				"type":        "number",
-				"description": "Number of lines to tail (0 means all, default: 0)",
+				"description": "Number of lines to tail (default: 100)",
 			},
 			"filter": map[string]interface{}{
 				"type":        "string",
 				"description": "Regex pattern to filter logs",
 			},
+			"offset": map[string]interface{}{
+				"type":        "number",
+				"description": "Skip the last N lines (for paging backwards through history)",
+			},
 		},
 		Required: []string{"session_id"},
 	}
+}
+
+// registerReadSessionLogTool registers the read_session_log tool
+func (s *Server) registerReadSessionLogTool() {
+	inputSchema := sessionLogInputSchema()
 
 	tool := mcp.Tool{
 		Name:        "read_session_log",
@@ -140,7 +149,7 @@ func (s *Server) registerReadSessionLogTool() {
 
 		opts := logs.ReadOptions{
 			SessionID: sessionID,
-			Lines:     0, // Read all lines by default
+			Lines:     100, // Default to last 100 lines
 		}
 
 		if lines, ok := args["lines"].(float64); ok {
@@ -149,15 +158,20 @@ func (s *Server) registerReadSessionLogTool() {
 		if filter, ok := args["filter"].(string); ok {
 			opts.Filter = filter
 		}
+		if offset, ok := args["offset"].(float64); ok {
+			opts.Offset = int(offset)
+		}
 
-		logLines, err := logs.ReadSessionLog(sessionID, opts)
+		logLines, totalLines, err := logs.ReadSessionLog(sessionID, opts)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to read session log: %v", err)), nil
 		}
 
 		result := map[string]interface{}{
-			"lines": logLines,
-			"count": len(logLines),
+			"lines":       logLines,
+			"count":       len(logLines),
+			"total_lines": totalLines,
+			"has_more":    calcHasMore(totalLines, opts.Lines, opts.Offset),
 		}
 
 		resultJSON, _ := json.Marshal(result)
