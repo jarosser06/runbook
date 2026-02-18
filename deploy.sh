@@ -9,6 +9,7 @@ set -euo pipefail
 # Flags:
 #   --infra           Deploy CloudFormation infrastructure first
 #   --clean           Remove build/ directory before building
+#   --web             Only deploy website and install scripts (skip binary builds)
 #   --cert-arn ARN    Override ACM certificate ARN (optional; auto-created otherwise)
 #
 # This script:
@@ -24,12 +25,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DEPLOY_INFRA=false
 CLEAN_BUILD=false
+WEB_ONLY=false
 CERT_ARN=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --infra) DEPLOY_INFRA=true; shift ;;
     --clean) CLEAN_BUILD=true; shift ;;
+    --web) WEB_ONLY=true; shift ;;
     --cert-arn) CERT_ARN="$2"; shift 2 ;;
     *) echo "Unknown flag: $1"; exit 1 ;;
   esac
@@ -73,9 +76,11 @@ if [ "$CLEAN_BUILD" = true ]; then
 fi
 
 # ---- Build all platforms -----------------------------------------------------
-echo "Building all platforms..."
-"${SCRIPT_DIR}/scripts/build-all.sh"
-echo ""
+if [ "$WEB_ONLY" = false ]; then
+  echo "Building all platforms..."
+  "${SCRIPT_DIR}/scripts/build-all.sh"
+  echo ""
+fi
 
 # ---- Copy website and install scripts into build/ ---------------------------
 echo "Copying website files to build/..."
@@ -101,11 +106,16 @@ echo ""
 
 # ---- CloudFront invalidation -------------------------------------------------
 echo "Creating CloudFront invalidation..."
-aws cloudfront create-invalidation \
+INVALIDATION_ID=$(aws cloudfront create-invalidation \
   --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
   --paths "/*" \
-  --query 'Invalidation.Status' \
-  --output text > /dev/null
+  --query 'Invalidation.Id' \
+  --output text)
+
+echo "Waiting for invalidation ${INVALIDATION_ID} to complete..."
+aws cloudfront wait invalidation-completed \
+  --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
+  --id "${INVALIDATION_ID}"
 
 echo ""
 echo "============================================"

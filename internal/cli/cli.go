@@ -1,90 +1,173 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
+	"github.com/spf13/cobra"
 	"runbookmcp.dev/internal/config"
 	"runbookmcp.dev/internal/logs"
 	"runbookmcp.dev/internal/process"
+	"runbookmcp.dev/internal/server"
 	"runbookmcp.dev/internal/task"
 )
 
-// Execute dispatches the CLI subcommand and returns the exit code.
-// workingDir, if non-empty, is the project directory used to locate a running
-// server and (in local mode) to change the working directory before executing.
-// args should start with the subcommand name.
-func Execute(workingDir string, args []string) int {
-	if len(args) == 0 {
-		printUsage()
-		return 1
+// Package-level vars are the standard way to bind Cobra persistent flags (same
+// pattern used by viper). Execute() resets them before each invocation to ensure
+// test isolation.
+var (
+	globalConfig     string
+	globalWorkingDir string
+	globalLocal      bool
+)
+
+// exitError is a sentinel error that carries a specific exit code.
+// RunE functions return this instead of calling os.Exit directly, allowing
+// Execute to handle process termination in one place.
+type exitError struct{ code int }
+
+func (e *exitError) Error() string { return fmt.Sprintf("exit status %d", e.code) }
+
+// newMCPServer performs the common server bootstrap: sets up logging, loads the
+// manifest, and creates the process manager, task manager, and MCP server.
+func newMCPServer(v string) (*server.Server, *process.Manager, error) {
+	if err := logs.Setup(); err != nil {
+		return nil, nil, fmt.Errorf("failed to setup logs: %w", err)
 	}
 
-	// Strip --local flag before subcommand detection.
-	local := false
-	var filtered []string
-	for _, a := range args {
-		if a == "--local" || a == "-local" {
-			local = true
-		} else {
-			filtered = append(filtered, a)
-		}
+	manifest, loaded, err := config.LoadManifest(globalConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load manifest: %w", err)
+	}
+	if !loaded {
+		fmt.Fprintln(os.Stderr, "Warning: No config file found. Server starting with empty configuration.")
+		fmt.Fprintln(os.Stderr, "Create .dev_workflow.yaml or .dev_workflow/ directory, or use --config flag")
 	}
 
-	if len(filtered) == 0 {
-		printUsage()
-		return 1
-	}
+	processManager := process.NewManager()
+	taskManager := task.NewManager(manifest, processManager)
+	mcpServer := server.NewServer(manifest, taskManager, processManager, loaded, v, globalConfig)
+	return mcpServer, processManager, nil
+}
 
-	subcmd := filtered[0]
-	remaining := filtered[1:]
-
-	// Auto-detect a running server and route through it (unless --local).
-	if !local {
-		serverData, err := process.ReadServerFile(workingDir)
-		if err == nil {
-			// File exists — verify the server is still alive.
-			if !process.IsProcessAlive(serverData.PID) || !process.ProbeHTTP(serverData.Addr) {
-				fmt.Fprintf(os.Stderr, "error: server.json exists but the server is not running (PID %d dead).\n", serverData.PID)
-				fmt.Fprintf(os.Stderr, "Remove %s to continue in local mode.\n", process.ServerRegistryFile)
-				return 1
+// newRootCmd builds and returns the full Cobra command tree.
+// It is separated from Execute so tests can construct a fresh command.
+func newRootCmd(v string) *cobra.Command {
+	root := &cobra.Command{
+		Use:           "runbook",
+		Short:         "MCP server for shell tasks",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Stdio mode (default, no subcommand): check for proxy first.
+			if !globalLocal {
+				serverData, err := process.ReadServerFile(globalWorkingDir)
+				if err == nil {
+					if !process.IsProcessAlive(serverData.PID) || !process.ProbeHTTP(serverData.Addr) {
+						fmt.Fprintf(os.Stderr, "error: server.json exists but the server is not running (PID %d dead).\n", serverData.PID)
+						fmt.Fprintf(os.Stderr, "Remove %s to continue in local mode.\n", process.ServerRegistryFile)
+						return &exitError{code: 1}
+					}
+					fmt.Fprintf(os.Stderr, "Proxying stdio to server at %s\n", serverData.Addr)
+					if err := server.ServeStdioProxy(serverData.Addr); err != nil {
+						return fmt.Errorf("proxy error: %w", err)
+					}
+					return nil
+				}
 			}
-			return remoteExecute(serverData.Addr, subcmd, remaining)
-		}
-		// err != nil → no server.json (or unreadable) → fall through to local mode.
+
+			if err := applyWorkingDir(); err != nil {
+				return err
+			}
+
+			fmt.Fprintln(os.Stderr, "runbook: standalone mode")
+
+			mcpServer, processManager, err := newMCPServer(v)
+			if err != nil {
+				return err
+			}
+
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+			go func() {
+				<-sigChan
+				fmt.Fprintln(os.Stderr, "\nShutting down...")
+				if err := processManager.StopAll(); err != nil {
+					fmt.Fprintf(os.Stderr, "Error stopping daemons: %v\n", err)
+				}
+				os.Exit(0)
+			}()
+
+			return mcpServer.Serve()
+		},
 	}
 
-	// Local mode: change to workingDir if requested.
-	if workingDir != "" {
-		if err := os.Chdir(workingDir); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: cannot change to directory %s: %v\n", workingDir, err)
-			return 1
-		}
-	}
+	// Persistent flags available to all subcommands.
+	root.PersistentFlags().StringVar(&globalConfig, "config", "", "Path to task manifest file or directory")
+	root.PersistentFlags().StringVar(&globalWorkingDir, "working-dir", "", "Set project working directory")
+	root.PersistentFlags().BoolVar(&globalLocal, "local", false, "Run locally, bypassing any running server")
 
-	switch subcmd {
-	case "list":
-		return cmdList(remaining)
-	case "run":
-		return cmdRun(remaining)
-	case "start":
-		return cmdStart(remaining)
-	case "stop":
-		return cmdStop(remaining)
-	case "status":
-		return cmdStatus(remaining)
-	case "logs":
-		return cmdLogs(remaining)
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", subcmd)
-		printUsage()
-		return 1
+	root.AddCommand(newServeCmd(v), newInitCmd(), newListCmd(), newRunCmd(), newStartCmd(), newStopCmd(), newStatusCmd(), newLogsCmd())
+	return root
+}
+
+func newServeCmd(v string) *cobra.Command {
+	var serveAddr string
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Run as standalone HTTP server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := applyWorkingDir(); err != nil {
+				return err
+			}
+			mcpServer, _, err := newMCPServer(v)
+			if err != nil {
+				return err
+			}
+			return mcpServer.ServeHTTP(serveAddr)
+		},
+	}
+	cmd.Flags().StringVar(&serveAddr, "addr", ":8080", "Listen address for HTTP mode")
+	return cmd
+}
+
+func newInitCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "init",
+		Short: "Initialize configuration file",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := applyWorkingDir(); err != nil {
+				return err
+			}
+			return handleInit()
+		},
 	}
 }
 
-// bootstrap loads config and creates the task manager, mirroring main.go setup.
+// Execute sets up and runs the Cobra command tree.
+func Execute(v string) {
+	// Reset global state for each invocation.
+	globalConfig = ""
+	globalWorkingDir = ""
+	globalLocal = false
+
+	cmd := newRootCmd(v)
+	if err := cmd.Execute(); err != nil {
+		var exitErr *exitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.code)
+		}
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// bootstrap loads config and creates the task manager, mirroring server setup.
 func bootstrap(configPath string) (*config.Manifest, *task.Manager, *process.Manager, error) {
 	if err := logs.Setup(); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to setup logs: %w", err)
@@ -100,46 +183,8 @@ func bootstrap(configPath string) (*config.Manifest, *task.Manager, *process.Man
 
 	processManager := process.NewManager()
 	taskManager := task.NewManager(manifest, processManager)
+	taskManager.SetStreaming(os.Stdout, os.Stderr)
 	return manifest, taskManager, processManager, nil
-}
-
-// parseGlobalFlags extracts --config from args and returns (configPath, remainingArgs).
-// It uses a dedicated FlagSet so task-specific flags are left untouched.
-func parseGlobalFlags(args []string) (configPath string, remaining []string) {
-	fs := flag.NewFlagSet("global", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	cfg := fs.String("config", "", "Path to task manifest file or directory")
-
-	// Separate global flags from the rest.
-	// Global flags come before the task name.
-	var globalArgs []string
-	for i, arg := range args {
-		if strings.HasPrefix(arg, "--config") || strings.HasPrefix(arg, "-config") {
-			if strings.Contains(arg, "=") {
-				globalArgs = append(globalArgs, arg)
-			} else if i+1 < len(args) {
-				globalArgs = append(globalArgs, arg, args[i+1])
-			}
-		}
-	}
-
-	// Parse only global flags
-	_ = fs.Parse(globalArgs)
-
-	// Remaining = everything except --config and its value
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if strings.HasPrefix(arg, "--config") || strings.HasPrefix(arg, "-config") {
-			if strings.Contains(arg, "=") {
-				continue // skip --config=value
-			}
-			i++ // skip next arg (the value)
-			continue
-		}
-		remaining = append(remaining, arg)
-	}
-
-	return *cfg, remaining
 }
 
 // parseTaskParams dynamically parses --key=value flags from args based on the task's
@@ -156,7 +201,6 @@ func parseTaskParams(taskDef config.Task, args []string) (map[string]interface{}
 	fs := flag.NewFlagSet("params", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
-	// Register a string flag for each parameter
 	flagPtrs := make(map[string]*string)
 	for name, param := range taskDef.Parameters {
 		defaultVal := ""
@@ -174,14 +218,12 @@ func parseTaskParams(taskDef config.Task, args []string) (map[string]interface{}
 		return nil, fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
-	// Collect values: only include flags that were explicitly set or have defaults
 	for name, ptr := range flagPtrs {
 		if *ptr != "" {
 			params[name] = *ptr
 		}
 	}
 
-	// Check required parameters
 	for name, param := range taskDef.Parameters {
 		if param.Required {
 			if _, ok := params[name]; !ok {
@@ -193,24 +235,136 @@ func parseTaskParams(taskDef config.Task, args []string) (map[string]interface{}
 	return params, nil
 }
 
-func printUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: runbook <command> [options]")
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Commands:")
-	fmt.Fprintln(os.Stderr, "  list                              List available tasks")
-	fmt.Fprintln(os.Stderr, "  run <task> [--param=value...]      Run a oneshot task or workflow")
-	fmt.Fprintln(os.Stderr, "  start <task> [--param=value...]    Start a daemon")
-	fmt.Fprintln(os.Stderr, "  stop <task>                        Stop a daemon")
-	fmt.Fprintln(os.Stderr, "  status <task>                      Show daemon status")
-	fmt.Fprintln(os.Stderr, "  logs <task> [options]               Show task logs")
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Global options:")
-	fmt.Fprintln(os.Stderr, "  --config=PATH    Path to task manifest file or directory")
-	fmt.Fprintln(os.Stderr, "  --local          Run locally, bypassing any running server")
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Server mode (original behavior):")
-	fmt.Fprintln(os.Stderr, "  runbook                            Start MCP server (stdio)")
-	fmt.Fprintln(os.Stderr, "  runbook -serve -addr :8080         Start MCP server (HTTP)")
-	fmt.Fprintln(os.Stderr, "  runbook -init                      Initialize config file")
-	fmt.Fprintln(os.Stderr, "  runbook -working-dir PATH          Set project working directory")
+// applyWorkingDir changes to the configured working directory if set.
+func applyWorkingDir() error {
+	if globalWorkingDir != "" {
+		if err := os.Chdir(globalWorkingDir); err != nil {
+			return fmt.Errorf("cannot change to directory %s: %w", globalWorkingDir, err)
+		}
+	}
+	return nil
+}
+
+// tryRemoteExecute checks for a running server and routes the command through it.
+// Returns (exitCode, true) if handled remotely, or (0, false) if no server found.
+func tryRemoteExecute(subcmd string, args []string) (int, bool) {
+	serverData, err := process.ReadServerFile(globalWorkingDir)
+	if err != nil {
+		return 0, false
+	}
+	if !process.IsProcessAlive(serverData.PID) || !process.ProbeHTTP(serverData.Addr) {
+		fmt.Fprintf(os.Stderr, "error: server.json exists but the server is not running (PID %d dead).\n", serverData.PID)
+		fmt.Fprintf(os.Stderr, "Remove %s to continue in local mode.\n", process.ServerRegistryFile)
+		return 1, true
+	}
+	fmt.Fprintf(os.Stderr, "runbook: proxying to server at %s\n", serverData.Addr)
+	return remoteExecute(serverData.Addr, subcmd, args), true
+}
+
+// runWithRemoteFallback handles the common pattern used by most subcommand RunE
+// functions: apply working dir, try remote execution if not --local, then fall
+// back to a local command function. The localFn receives the args and returns an
+// exit code.
+func runWithRemoteFallback(subcmd string, args []string, localFn func([]string) int) error {
+	if err := applyWorkingDir(); err != nil {
+		return err
+	}
+	if !globalLocal {
+		if code, handled := tryRemoteExecute(subcmd, args); handled {
+			if code != 0 {
+				return &exitError{code: code}
+			}
+			return nil
+		}
+	}
+	if code := localFn(args); code != 0 {
+		return &exitError{code: code}
+	}
+	return nil
+}
+
+// extractGlobalFlagsManual scans raw args for --config, --working-dir, --local
+// and returns their values plus the remaining args with those flags stripped.
+// Used by DisableFlagParsing commands where Cobra doesn't parse persistent flags.
+func extractGlobalFlagsManual(args []string) (configPath, workingDir string, local bool, remaining []string) {
+	remaining = make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--local" || arg == "-local":
+			local = true
+		case arg == "--config" || arg == "-config":
+			if i+1 < len(args) {
+				configPath = args[i+1]
+				i++
+			}
+		case strings.HasPrefix(arg, "--config=") || strings.HasPrefix(arg, "-config="):
+			configPath = arg[strings.IndexByte(arg, '=')+1:]
+		case arg == "--working-dir" || arg == "-working-dir":
+			if i+1 < len(args) {
+				workingDir = args[i+1]
+				i++
+			}
+		case strings.HasPrefix(arg, "--working-dir=") || strings.HasPrefix(arg, "-working-dir="):
+			workingDir = arg[strings.IndexByte(arg, '=')+1:]
+		default:
+			remaining = append(remaining, arg)
+		}
+	}
+	return
+}
+
+// mergeExtractedGlobals merges manually-extracted global flags into the package-level vars.
+func mergeExtractedGlobals(configPath, workingDir string, local bool) {
+	if configPath != "" {
+		globalConfig = configPath
+	}
+	if workingDir != "" {
+		globalWorkingDir = workingDir
+	}
+	if local {
+		globalLocal = true
+	}
+}
+
+const minimalConfig = `version: "1.0"
+
+# Example tasks - customize these for your project
+tasks:
+  build:
+    description: "Build the project"
+    command: "echo 'Add your build command here'"
+    type: oneshot
+
+  test:
+    description: "Run tests"
+    command: "echo 'Add your test command here'"
+    type: oneshot
+
+  lint:
+    description: "Run linter"
+    command: "echo 'Add your lint command here'"
+    type: oneshot
+
+# Task groups organize related tasks
+task_groups:
+  ci:
+    description: "CI pipeline tasks"
+    tasks:
+      - lint
+      - test
+      - build
+`
+
+func handleInit() error {
+	targetPath := "./.dev_workflow.yaml"
+	if _, err := os.Stat(targetPath); err == nil {
+		return fmt.Errorf("%s already exists (remove it or use the MCP 'init' tool with overwrite=true)", targetPath)
+	}
+	if err := os.WriteFile(targetPath, []byte(minimalConfig), 0644); err != nil {
+		return fmt.Errorf("failed to create config file: %w", err)
+	}
+	fmt.Printf("Successfully created %s\n", targetPath)
+	fmt.Println("Edit this file to add your project's tasks, then start the MCP server.")
+	return nil
 }

@@ -5,30 +5,35 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"text/tabwriter"
+
+	"github.com/spf13/cobra"
 )
 
-func cmdList(args []string) int {
-	configPath, remaining := parseGlobalFlags(args)
-	if len(remaining) > 0 {
-		fmt.Fprintf(os.Stderr, "list does not accept arguments: %s\n", strings.Join(remaining, " "))
-		return 1
+func newListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List available tasks",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runWithRemoteFallback("list", args, func(_ []string) int {
+				return cmdList()
+			})
+		},
 	}
+}
 
-	manifest, _, _, err := bootstrap(configPath)
+func cmdList() int {
+	manifest, _, _, err := bootstrap(globalConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
 	}
 
-	// Collect and sort task names
 	var taskNames []string
 	for name := range manifest.Tasks {
 		taskNames = append(taskNames, name)
 	}
 	sort.Strings(taskNames)
 
-	// Collect and sort workflow names
 	var workflowNames []string
 	for name := range manifest.Workflows {
 		workflowNames = append(workflowNames, name)
@@ -40,40 +45,70 @@ func cmdList(args []string) int {
 		return 0
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	const colGap = 2
 
 	if len(taskNames) > 0 {
-		fmt.Fprintf(w, "%s\t%s\t%s\n",
-			color(colorBold, "TASK"),
-			color(colorBold, "TYPE"),
+		// Compute column widths from data (no ANSI codes involved).
+		// Include param label lengths in col1 so they never bleed into the TYPE column.
+		col1 := len("TASK")
+		col2 := len("TYPE")
+		for _, name := range taskNames {
+			if len(name) > col1 {
+				col1 = len(name)
+			}
+			t := manifest.Tasks[name]
+			if len(string(t.Type)) > col2 {
+				col2 = len(string(t.Type))
+			}
+			for pn, p := range t.Parameters {
+				var plainLabel string
+				if p.Required {
+					plainLabel = fmt.Sprintf("  --%s (required)", pn)
+				} else if p.Default != nil {
+					plainLabel = fmt.Sprintf("  --%s [default: %v]", pn, *p.Default)
+				} else {
+					plainLabel = fmt.Sprintf("  --%s", pn)
+				}
+				if len(plainLabel) > col1 {
+					col1 = len(plainLabel)
+				}
+			}
+		}
+
+		// Header: color the words, pad with plain spaces so alignment is exact
+		fmt.Printf("%s%s  %s%s  %s\n",
+			color(colorBold, "TASK"), strings.Repeat(" ", col1-len("TASK")),
+			color(colorBold, "TYPE"), strings.Repeat(" ", col2-len("TYPE")),
 			color(colorBold, "DESCRIPTION"))
 
 		for _, name := range taskNames {
 			t := manifest.Tasks[name]
-			typeName := string(t.Type)
-			fmt.Fprintf(w, "%s\t%s\t%s\n", name, typeName, t.Description)
+			fmt.Printf("%-*s  %-*s  %s\n", col1, name, col2, string(t.Type), t.Description)
 
-			// Show parameters
 			if len(t.Parameters) > 0 {
 				var paramNames []string
 				for pn := range t.Parameters {
 					paramNames = append(paramNames, pn)
 				}
 				sort.Strings(paramNames)
+
 				for _, pn := range paramNames {
 					p := t.Parameters[pn]
-					parts := []string{fmt.Sprintf("  --%s", pn)}
+
+					// Param rows: col1=label, col2=empty, col3=description.
+					// Using %-*s for col1 ensures description aligns with DESCRIPTION header.
+					var displayLabel string
 					if p.Required {
-						parts = append(parts, color(colorRed, "(required)"))
+						displayLabel = fmt.Sprintf("  --%s %s", pn, color(colorRed, "(required)"))
+						plainLabel := fmt.Sprintf("  --%s (required)", pn)
+						fmt.Printf("%s%s  %-*s  %s\n", displayLabel, strings.Repeat(" ", col1-len(plainLabel)), col2, "", p.Description)
+					} else if p.Default != nil {
+						displayLabel = fmt.Sprintf("  --%s [default: %v]", pn, *p.Default)
+						fmt.Printf("%-*s  %-*s  %s\n", col1, displayLabel, col2, "", p.Description)
+					} else {
+						displayLabel = fmt.Sprintf("  --%s", pn)
+						fmt.Printf("%-*s  %-*s  %s\n", col1, displayLabel, col2, "", p.Description)
 					}
-					if p.Default != nil {
-						parts = append(parts, fmt.Sprintf("[default: %v]", *p.Default))
-					}
-					desc := ""
-					if p.Description != "" {
-						desc = p.Description
-					}
-					fmt.Fprintf(w, "%s\t\t%s\n", strings.Join(parts, " "), desc)
 				}
 			}
 		}
@@ -81,23 +116,39 @@ func cmdList(args []string) int {
 
 	if len(workflowNames) > 0 {
 		if len(taskNames) > 0 {
-			fmt.Fprintln(w)
+			fmt.Println()
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n",
-			color(colorBold, "WORKFLOW"),
-			color(colorBold, "STEPS"),
+
+		col1 := len("WORKFLOW")
+		col2 := len("STEPS")
+		for _, name := range workflowNames {
+			if len(name) > col1 {
+				col1 = len(name)
+			}
+			wf := manifest.Workflows[name]
+			var steps []string
+			for _, s := range wf.Steps {
+				steps = append(steps, s.Task)
+			}
+			if stepsStr := strings.Join(steps, " -> "); len(stepsStr) > col2 {
+				col2 = len(stepsStr)
+			}
+		}
+
+		fmt.Printf("%s%s  %s%s  %s\n",
+			color(colorBold, "WORKFLOW"), strings.Repeat(" ", col1-len("WORKFLOW")),
+			color(colorBold, "STEPS"), strings.Repeat(" ", col2-len("STEPS")),
 			color(colorBold, "DESCRIPTION"))
 
 		for _, name := range workflowNames {
 			wf := manifest.Workflows[name]
-			var stepNames []string
+			var steps []string
 			for _, s := range wf.Steps {
-				stepNames = append(stepNames, s.Task)
+				steps = append(steps, s.Task)
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\n", name, strings.Join(stepNames, " -> "), wf.Description)
+			fmt.Printf("%-*s  %-*s  %s\n", col1, name, col2, strings.Join(steps, " -> "), wf.Description)
 		}
 	}
 
-	w.Flush()
 	return 0
 }

@@ -5,22 +5,50 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
 	"runbookmcp.dev/internal/logs"
 )
 
-func cmdLogs(args []string) int {
-	configPath, remaining := parseGlobalFlags(args)
+func newLogsCmd() *cobra.Command {
+	var (
+		logsLines   int
+		logsFilter  string
+		logsSession string
+	)
 
-	if len(remaining) == 0 {
+	cmd := &cobra.Command{
+		Use:   "logs <task>",
+		Short: "Show task logs",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := applyWorkingDir(); err != nil {
+				return err
+			}
+			// Logs always read locally (even when server is running).
+			if code := execLogs(args[0], logsLines, logsFilter, logsSession); code != 0 {
+				return &exitError{code: code}
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().IntVar(&logsLines, "lines", 0, "Number of lines to tail (0 = all)")
+	cmd.Flags().StringVar(&logsFilter, "filter", "", "Regex pattern to filter lines")
+	cmd.Flags().StringVar(&logsSession, "session", "", "Session ID to read from (default: latest)")
+
+	return cmd
+}
+
+// cmdLogs accepts a raw arg slice (used by client.go's remoteExecute fallback).
+func cmdLogs(args []string) int {
+	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: runbook logs <task> [--lines=N] [--filter=REGEX] [--session=ID]")
 		return 1
 	}
 
-	// First positional arg is the task name
-	taskName := remaining[0]
-	flagArgs := remaining[1:]
+	taskName := args[0]
+	flagArgs := args[1:]
 
-	// Parse logs-specific flags
 	fs := flag.NewFlagSet("logs", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	lines := fs.Int("lines", 0, "Number of lines to tail (0 = all)")
@@ -31,8 +59,12 @@ func cmdLogs(args []string) int {
 		return 1
 	}
 
-	// Bootstrap to validate config
-	manifest, _, _, err := bootstrap(configPath)
+	return execLogs(taskName, *lines, *filter, *sessionID)
+}
+
+// execLogs is the typed implementation shared by both entry points.
+func execLogs(taskName string, lines int, filter string, sessionID string) int {
+	manifest, _, _, err := bootstrap(globalConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
@@ -44,9 +76,9 @@ func cmdLogs(args []string) int {
 	}
 
 	opts := logs.ReadOptions{
-		Lines:     *lines,
-		Filter:    *filter,
-		SessionID: *sessionID,
+		Lines:     lines,
+		Filter:    filter,
+		SessionID: sessionID,
 	}
 
 	logLines, err := logs.ReadLog(taskName, opts)

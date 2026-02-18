@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"time"
@@ -16,6 +17,8 @@ import (
 // Executor handles execution of one-shot tasks
 type Executor struct {
 	manifest *config.Manifest
+	stdout   io.Writer // if set, stream stdout here in addition to logging
+	stderr   io.Writer // if set, stream stderr here in addition to logging
 }
 
 // NewExecutor creates a new task executor
@@ -109,10 +112,18 @@ func (e *Executor) Execute(taskName string, params map[string]interface{}) (*Exe
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
 	}
 
-	// Create buffers for output
+	// Create buffers for output; stream to caller if writers are set
 	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	if e.stdout != nil {
+		cmd.Stdout = io.MultiWriter(e.stdout, &stdoutBuf)
+	} else {
+		cmd.Stdout = &stdoutBuf
+	}
+	if e.stderr != nil {
+		cmd.Stderr = io.MultiWriter(e.stderr, &stderrBuf)
+	} else {
+		cmd.Stderr = &stderrBuf
+	}
 
 	// Get current working directory for metadata
 	cwd, _ := os.Getwd()
@@ -238,5 +249,6 @@ func (e *Executor) Execute(taskName string, params map[string]interface{}) (*Exe
 		LogPath:   logWriter.GetLogPath(),
 		TimedOut:  timedOut,
 		SessionID: sessionID,
+		Streamed:  e.stdout != nil,
 	}, nil
 }

@@ -792,7 +792,7 @@
     <!-- HERO -->
     <section class="hero">
       <h1>Runbook</h1>
-      <p class="tagline">Make, rebuilt for the AI era</p>
+      <p class="tagline">One config. Two audiences.</p>
       <p class="description">
         Define your project's tasks once in YAML. Humans run them from the terminal.
         AI assistants run them as MCP tools. Same config, same behavior, zero duplication.
@@ -808,8 +808,8 @@
 
     <!-- HOW IT WORKS -->
     <section id="how">
-      <h2>One config. Two audiences.</h2>
-      <p>Most teams end up with a Makefile for humans and a separate set of AI prompts that describe the same tasks in different words. Runbook eliminates that split. Define your tasks once in YAML and both audiences use the same definitions.</p>
+      <h2>How it works</h2>
+      <p>Most teams end up with workflows defined across Makefiles, npm scripts, shell scripts, and a separate set of AI prompts that describe the same tasks in different words. Runbook eliminates that split. Define your tasks once and both audiences use the same definitions.</p>
       <div class="how-grid">
         <div class="how-side human">
           <h3>Human developer</h3>
@@ -844,8 +844,8 @@
       <div class="features-grid">
         <div class="feature-card">
           <span class="feature-icon">⚡</span>
-          <h3>Replace your Makefile</h3>
-          <p>One YAML file replaces your Makefile and your AI prompt library. No duplication between what humans type and what the AI knows.</p>
+          <h3>Stop defining your workflow twice</h3>
+          <p>Define tasks once. No separate scripts for humans and separate prompts for AI. Same definition, same behavior, both audiences.</p>
         </div>
         <div class="feature-card">
           <span class="feature-icon">🔌</span>
@@ -853,9 +853,9 @@
           <p>Each task becomes a proper MCP tool with a full schema automatically. Works with any MCP-compatible AI client.</p>
         </div>
         <div class="feature-card">
-          <span class="feature-icon">🌐</span>
-          <h3>Shared HTTP server</h3>
-          <p>Run <code>-serve</code> once and every AI session in every terminal connects to the same instance, sharing daemon state and logs.</p>
+          <span class="feature-icon">🎯</span>
+          <h3>AI that follows your workflow</h3>
+          <p>When build, test, and lint are defined tasks, the AI calls them consistently instead of guessing at shell commands. Same execution every time.</p>
         </div>
         <div class="feature-card">
           <span class="feature-icon">⚙️</span>
@@ -932,10 +932,27 @@
     <span class="yk">command</span>: <span class="ys">"go build -o bin/app ."</span>
     <span class="yk">type</span>: <span class="ys">oneshot</span>
 
+  <span class="yk">lint</span>:
+    <span class="yk">description</span>: <span class="ys">"Run linter"</span>
+    <span class="yk">command</span>: <span class="ys">"golangci-lint run ./..."</span>
+    <span class="yk">type</span>: <span class="ys">oneshot</span>
+
+  <span class="yk">test</span>:
+    <span class="yk">description</span>: <span class="ys">"Run tests"</span>
+    <span class="yk">command</span>: <span class="ys">"go test ./..."</span>
+    <span class="yk">type</span>: <span class="ys">oneshot</span>
+
   <span class="yk">dev</span>:
     <span class="yk">description</span>: <span class="ys">"Start development server"</span>
     <span class="yk">command</span>: <span class="ys">"npm run dev"</span>
-    <span class="yk">type</span>: <span class="ys">daemon</span></code></pre>
+    <span class="yk">type</span>: <span class="ys">daemon</span>
+
+<span class="yk">workflows</span>:
+  <span class="yk">ci</span>:
+    <span class="yk">description</span>: <span class="ys">"Lint and test"</span>
+    <span class="yk">steps</span>:
+      - <span class="yk">task</span>: <span class="ys">lint</span>
+      - <span class="yk">task</span>: <span class="ys">test</span></code></pre>
           </div>
         </div>
 
@@ -1018,7 +1035,7 @@ runbook -serve -config .dev_workflow.yaml
 
 <span class="yc"># or on a custom port</span>
 runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
-          <p style="margin-top:0.75rem">Then point each MCP client at <code>http://localhost:8080</code>. All sessions see the same tasks, the same running daemons, and the same log history.</p>
+          <p style="margin-top:0.75rem">Then point each MCP client at <code>http://localhost:9000</code>. All sessions see the same tasks, the same running daemons, and the same log history.</p>
         </div>
         <div class="http-callout">
           <h3>Why this matters</h3>
@@ -1086,7 +1103,7 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
         <span class="yk">description</span>: <span class="ys">"Version to deploy"</span>
         <span class="yk">default</span>: <span class="ys">"latest"</span></code></pre>
       <p>Each parameter becomes a field in the MCP tool schema, with its <code>description</code> shown to the AI. Required parameters must be provided; optional ones fall back to <code>default</code>.</p>
-      <p>You can also expose the task's working directory as a parameter using <code>expose_working_directory: true</code>. Useful when the same task runs against multiple directories.</p>
+      <p>You can also expose the task's working directory as a parameter using <code>expose_working_directory: true</code>. A useful way to make commands more flexible.</p>
     </section>
 
     <!-- WORKFLOWS -->

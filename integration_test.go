@@ -112,7 +112,7 @@ func readServerJSON(t *testing.T, dir string) serverJSON {
 func startServer(t *testing.T, bin, dir string, port int) *os.Process {
 	t.Helper()
 	addr := fmt.Sprintf(":%d", port)
-	cmd := exec.Command(bin, "-serve", "-addr", addr)
+	cmd := exec.Command(bin, "serve", "--addr", addr)
 	cmd.Dir = dir
 	cmd.Stdout = nil
 	cmd.Stderr = nil
@@ -343,7 +343,7 @@ func TestIntegrationWorkingDirFlag(t *testing.T) {
 
 	// Start the server with -working-dir pointing to projectDir.
 	otherDir := t.TempDir() // CWD for the server process (different from projectDir)
-	cmd := exec.Command(bin, "-serve", "-addr", fmt.Sprintf(":%d", port), "-working-dir", projectDir)
+	cmd := exec.Command(bin, "serve", "--addr", fmt.Sprintf(":%d", port), "--working-dir", projectDir)
 	cmd.Dir = otherDir
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start server: %v", err)
@@ -365,7 +365,7 @@ func TestIntegrationWorkingDirFlag(t *testing.T) {
 
 	// CLI with -working-dir should route through the server.
 	cliDir := t.TempDir() // CLI runs from a completely different directory
-	out, code := runCLI(t, bin, cliDir, "-working-dir", projectDir, "list")
+	out, code := runCLI(t, bin, cliDir, "--working-dir", projectDir, "list")
 	if code != 0 {
 		t.Fatalf("runbook -working-dir list exit=%d output=%q", code, out)
 	}

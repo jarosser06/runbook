@@ -39,18 +39,21 @@ func color(code, text string) string {
 
 // printExecutionResult prints a oneshot execution result with human-friendly formatting.
 // Task output goes to stdout (pipeable), metadata goes to stderr.
+// When r.Streamed is true the output was already written in real time; skip reprinting.
 func printExecutionResult(r *task.ExecutionResult) {
-	// Print task output to stdout
-	if r.Stdout != "" {
-		fmt.Print(r.Stdout)
-		if !strings.HasSuffix(r.Stdout, "\n") {
-			fmt.Println()
+	// Print task output to stdout (only when not already streamed live)
+	if !r.Streamed {
+		if r.Stdout != "" {
+			fmt.Print(r.Stdout)
+			if !strings.HasSuffix(r.Stdout, "\n") {
+				fmt.Println()
+			}
 		}
-	}
-	if r.Stderr != "" {
-		fmt.Fprint(os.Stderr, r.Stderr)
-		if !strings.HasSuffix(r.Stderr, "\n") {
-			fmt.Fprintln(os.Stderr)
+		if r.Stderr != "" {
+			fmt.Fprint(os.Stderr, r.Stderr)
+			if !strings.HasSuffix(r.Stderr, "\n") {
+				fmt.Fprintln(os.Stderr)
+			}
 		}
 	}
 

@@ -479,8 +479,9 @@ func TestManagerStopAllConcurrent(t *testing.T) {
 }
 
 func TestPIDFileRestoreAcrossManagerInstances(t *testing.T) {
-	// This is the core CLI scenario: start a daemon, create a NEW manager
-	// (simulating a new CLI invocation), and verify status is still visible.
+	// Simulates a server being killed with SIGKILL (leaving orphaned daemons +
+	// PID files on disk). The next manager startup must kill those orphans and
+	// remove their PID files so the system starts with a clean slate.
 	tmpDir := t.TempDir()
 	oldWd, err := os.Getwd()
 	if err != nil {
@@ -500,7 +501,7 @@ func TestPIDFileRestoreAcrossManagerInstances(t *testing.T) {
 		t.Fatalf("failed to setup logs: %v", err)
 	}
 
-	// Manager 1: start the daemon
+	// Manager 1: start the daemon (simulates previous server instance)
 	m1 := NewManager()
 	logPath := logs.GetLogPath("persist-daemon")
 	if err := m1.Start("persist-daemon", "test-session-id", "sleep 30", nil, "", logPath, ""); err != nil {
@@ -511,31 +512,28 @@ func TestPIDFileRestoreAcrossManagerInstances(t *testing.T) {
 	if err != nil || !running || pid == 0 {
 		t.Fatalf("expected running daemon, got running=%v pid=%d err=%v", running, pid, err)
 	}
-	t.Logf("Daemon started with PID %d", pid)
+	t.Logf("Orphaned daemon PID: %d", pid)
 
-	// Manager 2: simulates a new CLI invocation — must see the running daemon
+	// Manager 2: simulates new server startup after previous was SIGKILL'd.
+	// Must kill the orphaned process and remove PID files.
 	m2 := NewManager()
-	running2, pid2, err := m2.Status("persist-daemon")
-	if err != nil {
-		t.Fatalf("unexpected error from m2.Status: %v", err)
-	}
-	if !running2 {
-		t.Errorf("Manager 2 should see the daemon as running (PID file restore)")
-	}
-	if pid2 != pid {
-		t.Errorf("expected PID %d from m2, got %d", pid, pid2)
+
+	// Orphan should be dead
+	if isProcessAlive(pid) {
+		t.Errorf("expected orphaned daemon PID %d to be killed by new manager startup", pid)
 	}
 
-	// Manager 2 should also be able to stop the daemon
-	if err := m2.Stop("persist-daemon"); err != nil {
-		t.Fatalf("m2.Stop failed: %v", err)
+	// Manager 2 should not see the daemon as running
+	running2, _, _ := m2.Status("persist-daemon")
+	if running2 {
+		t.Errorf("Manager 2 should not see orphaned daemon as running after cleanup")
 	}
 
-	// Manager 3: after stop, daemon should be gone
+	// Manager 3: PID file should be gone, clean state
 	m3 := NewManager()
 	running3, _, _ := m3.Status("persist-daemon")
 	if running3 {
-		t.Errorf("Manager 3 should see daemon as stopped after m2.Stop")
+		t.Errorf("Manager 3 should see clean state with no running daemons")
 	}
 }
 

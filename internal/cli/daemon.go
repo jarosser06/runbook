@@ -4,20 +4,79 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
 	"runbookmcp.dev/internal/config"
 )
 
+func newStartCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:                "start <task> [--param=value...]",
+		Short:              "Start a daemon",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			for _, a := range args {
+				if a == "--help" || a == "-h" {
+					return cmd.Help()
+				}
+			}
+			extractedConfig, extractedWorkingDir, extractedLocal, remaining := extractGlobalFlagsManual(args)
+			mergeExtractedGlobals(extractedConfig, extractedWorkingDir, extractedLocal)
+
+			if err := applyWorkingDir(); err != nil {
+				return err
+			}
+			if !globalLocal {
+				if code, handled := tryRemoteExecute("start", remaining); handled {
+					if code != 0 {
+						return &exitError{code: code}
+					}
+					return nil
+				}
+			}
+			if code := cmdStart(remaining); code != 0 {
+				return &exitError{code: code}
+			}
+			return nil
+		},
+	}
+}
+
+func newStopCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "stop <task>",
+		Short: "Stop a daemon",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runWithRemoteFallback("stop", args, func(a []string) int {
+				return cmdStop(a[0])
+			})
+		},
+	}
+}
+
+func newStatusCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status <task>",
+		Short: "Show daemon status",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runWithRemoteFallback("status", args, func(a []string) int {
+				return cmdStatus(a[0])
+			})
+		},
+	}
+}
+
 func cmdStart(args []string) int {
-	configPath, remaining := parseGlobalFlags(args)
-	if len(remaining) == 0 {
+	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: runbook start <task> [--param=value...]")
 		return 1
 	}
 
-	taskName := remaining[0]
-	taskArgs := remaining[1:]
+	taskName := args[0]
+	taskArgs := args[1:]
 
-	manifest, manager, _, err := bootstrap(configPath)
+	manifest, manager, _, err := bootstrap(globalConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
@@ -54,16 +113,8 @@ func cmdStart(args []string) int {
 	return 0
 }
 
-func cmdStop(args []string) int {
-	configPath, remaining := parseGlobalFlags(args)
-	if len(remaining) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: runbook stop <task>")
-		return 1
-	}
-
-	taskName := remaining[0]
-
-	_, manager, _, err := bootstrap(configPath)
+func cmdStop(taskName string) int {
+	_, manager, _, err := bootstrap(globalConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
@@ -83,16 +134,8 @@ func cmdStop(args []string) int {
 	return 0
 }
 
-func cmdStatus(args []string) int {
-	configPath, remaining := parseGlobalFlags(args)
-	if len(remaining) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: runbook status <task>")
-		return 1
-	}
-
-	taskName := remaining[0]
-
-	_, manager, _, err := bootstrap(configPath)
+func cmdStatus(taskName string) int {
+	_, manager, _, err := bootstrap(globalConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1

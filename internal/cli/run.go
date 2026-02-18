@@ -6,21 +6,54 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
 	"runbookmcp.dev/internal/config"
 	"runbookmcp.dev/internal/task"
 )
 
+func newRunCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:                "run <task> [--param=value...]",
+		Short:              "Run a oneshot task or workflow",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			for _, a := range args {
+				if a == "--help" || a == "-h" {
+					return cmd.Help()
+				}
+			}
+			extractedConfig, extractedWorkingDir, extractedLocal, remaining := extractGlobalFlagsManual(args)
+			mergeExtractedGlobals(extractedConfig, extractedWorkingDir, extractedLocal)
+
+			if err := applyWorkingDir(); err != nil {
+				return err
+			}
+			if !globalLocal {
+				if code, handled := tryRemoteExecute("run", remaining); handled {
+					if code != 0 {
+						return &exitError{code: code}
+					}
+					return nil
+				}
+			}
+			if code := cmdRun(remaining); code != 0 {
+				return &exitError{code: code}
+			}
+			return nil
+		},
+	}
+}
+
 func cmdRun(args []string) int {
-	configPath, remaining := parseGlobalFlags(args)
-	if len(remaining) == 0 {
+	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: runbook run <task> [--param=value...]")
 		return 1
 	}
 
-	taskName := remaining[0]
-	taskArgs := remaining[1:]
+	taskName := args[0]
+	taskArgs := args[1:]
 
-	manifest, manager, _, err := bootstrap(configPath)
+	manifest, manager, _, err := bootstrap(globalConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1

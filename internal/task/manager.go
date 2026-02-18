@@ -2,6 +2,7 @@ package task
 
 import (
 	"fmt"
+	"io"
 
 	"runbookmcp.dev/internal/config"
 	"runbookmcp.dev/internal/logs"
@@ -37,6 +38,15 @@ func NewManager(manifest *config.Manifest, processManager ProcessManager) *Manag
 		processManager:   processManager,
 		manifest:         manifest,
 	}
+}
+
+// SetStreaming configures the executor to stream stdout/stderr to the given
+// writers in addition to capturing them for logging. Pass os.Stdout/os.Stderr
+// for CLI use; leave unset (nil) for MCP server use to avoid polluting the
+// stdio protocol stream.
+func (m *Manager) SetStreaming(stdout, stderr io.Writer) {
+	m.executor.stdout = stdout
+	m.executor.stderr = stderr
 }
 
 // ExecuteOneShot executes a one-shot task with deduplication.

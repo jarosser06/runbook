@@ -113,6 +113,19 @@ tasks:
         description: "Path to search in (default: current directory)"
         default: "."
 
+  ticker:
+    description: "Demo daemon: logs a timestamp every few seconds"
+    type: daemon
+    command: |
+      #!/bin/bash
+      echo "ticker started (PID $$)"
+      i=0
+      while true; do
+        i=$((i+1))
+        echo "[tick $i] $(date '+%Y-%m-%d %H:%M:%S')"
+        sleep 2
+      done
+
   orphan_test:
     description: "Test daemon that spawns children to verify cleanup"
     type: daemon

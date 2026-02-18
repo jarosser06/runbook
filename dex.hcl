@@ -14,26 +14,23 @@ claude_settings "project_permissions" {
   enable_all_project_mcp_servers = true
 }
 
-mcp_server "dev-workflow-mcp" {
-  description = "Dev Workflow MCP"
-  command = "$${PWD}/bin/dev-workflow-mcp"
+mcp_server "runbook" {
+  description = "Local Runbook"
+  command = "$${PWD}/bin/runbook"
   args = [
-    "-config",
+    "--config",
     "$${PWD}/examples/basic/mcp-tasks.yaml"
   ]
 }
 
-registry "dex-dev-registry" {
-  url = "http://dex-dev-registry-production-471112549359.s3-website-us-west-2.amazonaws.com"
+registry "nexus" {
+  url = "https://nexustemplateproduction.z13.web.core.windows.net"
 }
 
+plugin "base-dev" {}
 
-plugin "base-dev" {
-  registry = "dex-dev-registry"
-}
-
-plugin "code-review" {
-  registry = "dex-dev-registry"
-}
+plugin "code-review" {}
 
 plugin "typescript" {}
+
+

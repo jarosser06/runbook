@@ -37,9 +37,9 @@ func NewManager() *Manager {
 	return pm
 }
 
-// restoreFromPIDFiles scans the pids directory and re-populates the in-memory
-// process map for any daemons that are still alive. Stale PID files (dead
-// processes) are deleted automatically.
+// restoreFromPIDFiles scans the pids directory on startup and kills any
+// daemons left behind by a previous server instance (e.g. killed with SIGKILL),
+// then removes their PID files. This ensures clean state on every startup.
 func (pm *Manager) restoreFromPIDFiles() {
 	files, err := scanPIDFiles()
 	if err != nil {
@@ -48,41 +48,19 @@ func (pm *Manager) restoreFromPIDFiles() {
 	}
 
 	for _, data := range files {
-		if !isProcessAlive(data.PID) {
-			deletePIDFile(data.TaskName)
-			continue
-		}
-
-		doneChan := make(chan struct{})
-		pm.processes[data.TaskName] = &ProcessInfo{
-			PID:       data.PID,
-			StartTime: data.StartTime,
-			LogFile:   data.LogFile,
-			SessionID: data.SessionID,
-			done:      doneChan,
-		}
-		pm.monitorRestoredProcess(data.TaskName, data.PID, doneChan)
-	}
-}
-
-// monitorRestoredProcess polls isProcessAlive for a daemon that was restored
-// from a PID file (we are not its parent so we cannot call Wait).
-// Important: close doneChan BEFORE acquiring the mutex, matching the ordering
-// in the native Start() goroutine so Stop() can unblock while holding the lock.
-func (pm *Manager) monitorRestoredProcess(taskName string, pid int, doneChan chan struct{}) {
-	go func() {
-		for {
-			time.Sleep(500 * time.Millisecond)
-			if !isProcessAlive(pid) {
-				deletePIDFile(taskName)
-				close(doneChan) // unblock any Stop() waiter before acquiring lock
-				pm.mu.Lock()
-				delete(pm.processes, taskName)
-				pm.mu.Unlock()
-				return
+		if isProcessAlive(data.PID) {
+			// Kill the orphaned process group left by a previous server instance.
+			if err := killProcessGroup(data.PID, syscall.SIGKILL); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to kill orphaned daemon %s (PID %d): %v\n", data.TaskName, data.PID, err)
+			}
+			// Wait up to 2s for the process to be reaped before removing the PID file.
+			deadline := time.Now().Add(2 * time.Second)
+			for time.Now().Before(deadline) && isProcessAlive(data.PID) {
+				time.Sleep(20 * time.Millisecond)
 			}
 		}
-	}()
+		deletePIDFile(data.TaskName)
+	}
 }
 
 // Start starts a new daemon process

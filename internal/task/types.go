@@ -16,6 +16,7 @@ type ExecutionResult struct {
 	LogPath      string        `json:"log_path,omitempty"`
 	TimedOut     bool          `json:"timed_out"`
 	SessionID    string        `json:"session_id,omitempty"`
+	Streamed     bool          `json:"-"`
 }
 
 // DaemonStatus represents the status of a daemon task
