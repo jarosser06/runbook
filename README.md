@@ -38,6 +38,24 @@ Create a `.runbook/` directory with one or more YAML files:
 
 Each file is a standard manifest. They are merged together — task names, workflow names, and prompt names must be unique across files.
 
+### Overrides file
+
+Place a `.runbook.overrides.yaml` at the project root to control task visibility without editing your config files. Glob patterns are supported for task names.
+
+```yaml
+# .runbook.overrides.yaml
+tasks:
+  deploy:
+    disabled: true       # fully disable (CLI + MCP)
+  ts-*:
+    disable_mcp: true    # hide from AI, keep CLI access
+workflows:
+  ci:
+    disabled: true
+```
+
+The overrides file is optional and is ignored if it does not exist.
+
 ### Example
 
 `.runbook/tasks.yaml`:

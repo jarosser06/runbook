@@ -914,7 +914,7 @@
         <div class="how-center">
           <div class="how-arrows"><span class="arr">→</span></div>
           <div class="how-yaml">
-            <span class="yaml-label">.dev_workflow.yaml</span>
+            <span class="yaml-label">.runbook/</span>
             <span class="yaml-sub">one process · shared state</span>
           </div>
           <div class="how-arrows"><span class="arr">←</span></div>
@@ -1024,9 +1024,9 @@
           </div>
           <div class="step-content">
             <div class="step-label">Step 1</div>
-            <h3>Create a config file</h3>
-            <p>Create <code>.dev_workflow.yaml</code> at the root of your project. Point tasks at whatever tools you already use. Runbook wraps them, it doesn't replace them.</p>
-            <span class="fi">.dev_workflow.yaml</span>
+            <h3>Create a config directory</h3>
+            <p>Create a <code>.runbook/</code> directory at the root of your project with one or more YAML files. Point tasks at whatever tools you already use. Runbook wraps them, it doesn't replace them.</p>
+            <span class="fi">.runbook/tasks.yaml</span>
 <pre><code><span class="yk">version</span>: <span class="ys">"1.0"</span>
 
 <span class="yk">defaults</span>:
@@ -1176,7 +1176,7 @@ runbook stop api</code></pre>
           <div class="step-content">
             <div class="step-label">Step 3</div>
             <h3>Add to your MCP client</h3>
-            <p>Point your MCP client (Claude Desktop, Claude Code, or any compatible tool) at the runbook binary. Runbook discovers your config automatically — it looks for <code>.dev_workflow.yaml</code> or a <code>.dev_workflow/</code> directory in the working directory.</p>
+            <p>Point your MCP client (Claude Desktop, Claude Code, or any compatible tool) at the runbook binary. Runbook discovers your config automatically — it looks for a <code>.runbook/</code> directory in the working directory.</p>
             <span class="fi">.mcp.json</span>
 <pre><code>{
   <span class="yk">"mcpServers"</span>: {
@@ -1358,7 +1358,7 @@ runbook serve --addr :9000</code></pre>
     <span class="yk">description</span>: <span class="ys">"How to deploy this service"</span>
     <span class="yk">file</span>: <span class="ys">"./docs/deployment.md"</span>
     <span class="yk">mime_type</span>: <span class="ys">"text/markdown"</span></code></pre>
-      <p>Custom resources are mounted at <code>dev-workflow://custom/{name}</code> and are accessible to any AI session connected to the server.</p>
+      <p>Custom resources are mounted at <code>runbook://custom/{name}</code> and are accessible to any AI session connected to the server.</p>
     </section>
 
     <!-- REFERENCE -->
@@ -1385,6 +1385,30 @@ runbook serve --addr :9000</code></pre>
       </div>
 
       <div class="ref-section">
+        <h3>Overrides file</h3>
+        <p style="font-size:0.875rem">Place a <code>.runbook.overrides.yaml</code> file at the project root to control task visibility without editing your config files. This is useful for locally disabling tasks shared across a team. Glob patterns are supported.</p>
+<pre><code><span class="yc"># .runbook.overrides.yaml</span>
+<span class="yk">tasks</span>:
+  <span class="yk">deploy</span>:
+    <span class="yk">disabled</span>: <span class="yb">true</span>       <span class="yc"># fully disable</span>
+  <span class="yk">ts-*</span>:
+    <span class="yk">disable_mcp</span>: <span class="yb">true</span>   <span class="yc"># hide from AI, keep CLI access</span>
+
+<span class="yk">workflows</span>:
+  <span class="yk">ci</span>:
+    <span class="yk">disabled</span>: <span class="yb">true</span>
+
+<span class="yk">prompts</span>:
+  <span class="yk">dev-workflow</span>:
+    <span class="yk">disabled</span>: <span class="yb">true</span>
+
+<span class="yk">resources</span>:
+  <span class="yk">architecture</span>:
+    <span class="yk">disabled</span>: <span class="yb">true</span></code></pre>
+        <p style="font-size:0.875rem;margin-top:0.5rem">Overrides are loaded after the main config and are additive — once a flag is set to <code>true</code>, it stays set. The overrides file is optional and is ignored if it does not exist.</p>
+      </div>
+
+      <div class="ref-section">
         <h3>Task fields</h3>
         <table>
           <thead>
@@ -1402,6 +1426,7 @@ runbook serve --addr :9000</code></pre>
             <tr><td><code>parameters</code></td><td>Named parameters with <code>type</code>, <code>required</code>, <code>description</code>, and optional <code>default</code>.</td></tr>
             <tr><td><code>depends_on</code></td><td>List of task names that must complete successfully before this task runs. Dependencies are resolved automatically regardless of how the task is invoked.</td></tr>
             <tr><td><code>disable_mcp</code></td><td>If <code>true</code>, the task is excluded from MCP tool registration. It remains available via the CLI but is not visible to AI sessions.</td></tr>
+            <tr><td><code>disabled</code></td><td>If <code>true</code>, the task is fully disabled — excluded from both MCP and CLI. Useful for temporarily hiding tasks without removing them from config.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1413,7 +1438,7 @@ runbook serve --addr :9000</code></pre>
             <tr><th>Command</th><th>Description</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>runbook init</code></td><td>Create a minimal <code>.dev_workflow.yaml</code> in the current directory. Skips if one already exists. Also available as the <code>init</code> MCP tool so an AI can bootstrap the config from within a session.</td></tr>
+            <tr><td><code>runbook init</code></td><td>Create a minimal <code>.runbook/tasks.yaml</code> in the current directory. Skips if it already exists. Also available as the <code>init</code> MCP tool so an AI can bootstrap the config from within a session.</td></tr>
             <tr><td><code>runbook serve [--addr &lt;addr&gt;]</code></td><td>Run as a standalone HTTP server instead of stdio MCP mode. Enables shared state, CLI auto-proxy, and execution deduplication across sessions. Default address: <code>:8080</code>.</td></tr>
             <tr><td><code>runbook list</code></td><td>List all available tasks and workflows with their types, descriptions, and parameters.</td></tr>
             <tr><td><code>runbook run &lt;task&gt; [--param=value...]</code></td><td>Run a oneshot task or workflow. Parameters passed as <code>--key=value</code> flags.</td></tr>
@@ -1433,12 +1458,12 @@ runbook serve --addr :9000</code></pre>
             <tr><th>Flag</th><th>Description</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>--config &lt;path&gt;</code></td><td>Path to a config file or directory. If omitted, Runbook looks for <code>.dev_workflow.yaml</code> or <code>.dev_workflow/</code> in the current directory.</td></tr>
+            <tr><td><code>--config &lt;path&gt;</code></td><td>Path to a config file or directory. If omitted, Runbook looks for a <code>.runbook/</code> directory in the current directory.</td></tr>
             <tr><td><code>--working-dir &lt;path&gt;</code></td><td>Set the project working directory before loading config and running commands.</td></tr>
             <tr><td><code>--local</code></td><td>Bypass any running HTTP server and execute locally. Useful when you want to run a command in the current process without proxying.</td></tr>
           </tbody>
         </table>
-        <p style="margin-top:0.75rem;font-size:0.875rem">The <code>runbook serve</code> subcommand accepts an additional <code>--addr &lt;addr&gt;</code> flag to set the listen address (default: <code>:8080</code>). Use <code>runbook init</code> to scaffold a starter <code>.dev_workflow.yaml</code> in the current directory.</p>
+        <p style="margin-top:0.75rem;font-size:0.875rem">The <code>runbook serve</code> subcommand accepts an additional <code>--addr &lt;addr&gt;</code> flag to set the listen address (default: <code>:8080</code>). Use <code>runbook init</code> to scaffold a starter <code>.runbook/tasks.yaml</code> in the current directory.</p>
       </div>
 
       <div class="ref-section">
@@ -1448,7 +1473,7 @@ runbook serve --addr :9000</code></pre>
             <tr><th>Tool</th><th>Description</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>init</code></td><td>Create a starter <code>.dev_workflow.yaml</code> from within an AI session. Accepts optional <code>path</code> and <code>overwrite</code> parameters.</td></tr>
+            <tr><td><code>init</code></td><td>Initialize a <code>.runbook/tasks.yaml</code> from within an AI session. Accepts optional <code>path</code> and <code>overwrite</code> parameters.</td></tr>
             <tr><td><code>refresh_config</code></td><td>Reload all configuration from disk without restarting the server. Re-registers tools, resources, and prompts. Running daemons are not disrupted. Lets AI pick up config edits immediately.</td></tr>
           </tbody>
         </table>

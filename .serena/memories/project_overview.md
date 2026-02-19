@@ -27,9 +27,9 @@ MCP (Model Context Protocol) server that exposes shell tasks (oneshot and daemon
 ## Paths
 - Config directory: `.runbook/` (merged from all *.yaml files in dir)
 - Overrides file: `.runbook.overrides.yaml` (optional, loaded after main manifest)
-- Server registry: `._runbook/server.json`
-- PID files: `._runbook/pids/`
-- Logs: `._runbook/logs/`
+- Server registry: `._runbook_state/server.json`
+- PID files: `._runbook_state/pids/`
+- Logs: `._runbook_state/logs/`
 
 ## Key Patterns
 - Config types in `config/types.go`, validation in `validator.go`, merging in `merger.go`

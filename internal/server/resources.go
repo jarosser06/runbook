@@ -453,6 +453,8 @@ tasks:
 | env | No | map | Environment variables to set |
 | parameters | No | map | Parameter definitions (see Parameters section) |
 | depends_on | No | []string | List of task names this task depends on |
+| disabled | No | bool | If true, hidden from MCP and CLI entirely |
+| disable_mcp | No | bool | If true, hidden from MCP only; CLI can still run it |
 
 ### Parameterized Tasks
 
@@ -570,6 +572,8 @@ workflows:
 | timeout | No | int | Timeout in seconds for entire workflow |
 | parameters | No | map | Workflow-level parameters (same schema as task parameters) |
 | steps | Yes | list | Ordered list of steps to execute |
+| disabled | No | bool | If true, hidden from MCP and CLI entirely |
+| disable_mcp | No | bool | If true, hidden from MCP only |
 
 ### Step Fields
 
@@ -613,6 +617,32 @@ Task groups are exposed as the ` + "`dev-workflow://task-groups`" + ` MCP resour
 
 **Optional.** Predefined prompts with template variable substitution.
 
+### Prompt Fields
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| description | Yes | string | Human-readable description shown in MCP |
+| content | No* | string | Inline prompt content (supports templates) |
+| file | No* | string | Path to file containing prompt content (supports templates) |
+| disabled | No | bool | If true, hidden from MCP entirely |
+
+*Either ` + "`content`" + ` or ` + "`file`" + ` must be provided.
+
+### Template Methods
+
+Prompts support ` + "`{{.Tasks.<name>.<method>}}`" + ` expressions:
+
+| Method | Description | Example output |
+|--------|-------------|----------------|
+| ` + "`.Run`" + ` | Tool name for running a oneshot task | ` + "`run_test`" + ` |
+| ` + "`.Start`" + ` | Tool name for starting a daemon | ` + "`start_dev`" + ` |
+| ` + "`.Stop`" + ` | Tool name for stopping a daemon | ` + "`stop_dev`" + ` |
+| ` + "`.Status`" + ` | Tool name for checking daemon status | ` + "`status_dev`" + ` |
+| ` + "`.Logs`" + ` | Tool name for reading daemon logs | ` + "`logs_dev`" + ` |
+| ` + "`.Desc`" + ` | Task description text | ` + "`Run all tests`" + ` |
+
+### Example
+
 ` + "```yaml" + `
 prompts:
   dev_setup:
@@ -626,9 +656,186 @@ prompts:
 
       To check dev server status: {{.Tasks.dev.Status}}
       To view dev server logs: {{.Tasks.dev.Logs}}
+
+  ci_guide:
+    description: "CI workflow guide loaded from file"
+    file: "docs/ci-guide.md"
+
+  draft_prompt:
+    description: "Work in progress"
+    content: "..."
+    disabled: true
 ` + "```" + `
 
-See the Template System documentation for details on template syntax.
+See the Template System documentation for full template syntax.
+
+## Custom Resources
+
+**Optional.** Static or template-driven content served as MCP resources under ` + "`runbook://custom/<name>`" + `.
+
+### Resource Fields
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| description | Yes | string | Human-readable description shown in MCP |
+| content | No* | string | Inline resource content (supports templates) |
+| file | No* | string | Path to file containing resource content (supports templates) |
+| mime_type | No | string | MIME type of the resource (default: ` + "`text/markdown`" + `) |
+| disabled | No | bool | If true, hidden from MCP entirely |
+
+*Either ` + "`content`" + ` or ` + "`file`" + ` must be provided.
+
+### URI Scheme
+
+Custom resources are available at ` + "`runbook://custom/<name>`" + `. For example, a resource named ` + "`architecture`" + ` is served at ` + "`runbook://custom/architecture`" + `.
+
+### Template Support
+
+Resource content supports the same ` + "`{{.Tasks.<name>.<method>}}`" + ` template syntax as prompts.
+
+### Example
+
+` + "```yaml" + `
+resources:
+  architecture:
+    description: "System architecture overview"
+    content: |
+      # Architecture
+
+      Key tools:
+      - Run tests: {{.Tasks.test.Run}}
+      - Start server: {{.Tasks.dev.Start}}
+
+  api_reference:
+    description: "API reference"
+    file: "docs/api.md"
+    mime_type: "text/markdown"
+` + "```" + `
+
+## Disabling and Visibility
+
+Items can be hidden from MCP (and optionally the CLI) using ` + "`disabled`" + ` and ` + "`disable_mcp`" + ` flags.
+
+### Flag Semantics
+
+| Flag | Effect |
+|------|--------|
+| ` + "`disabled: true`" + ` | Hidden from both MCP and CLI entirely |
+| ` + "`disable_mcp: true`" + ` | Hidden from MCP only; CLI can still run it |
+
+### Supported Per Item Type
+
+| Item type | ` + "`disabled`" + ` | ` + "`disable_mcp`" + ` |
+|-----------|-----------|---------------|
+| tasks | yes | yes |
+| workflows | yes | yes |
+| prompts | yes | — |
+| resources | yes | — |
+
+### Examples
+
+` + "```yaml" + `
+tasks:
+  internal_task:
+    description: "Available via CLI but not MCP"
+    command: "./internal-script.sh"
+    type: oneshot
+    disable_mcp: true
+
+  archived_task:
+    description: "Completely hidden"
+    command: "..."
+    type: oneshot
+    disabled: true
+
+workflows:
+  debug_workflow:
+    description: "Debug only"
+    steps:
+      - task: internal_task
+    disable_mcp: true
+
+prompts:
+  draft_prompt:
+    description: "Work in progress"
+    content: "..."
+    disabled: true
+
+resources:
+  internal_doc:
+    description: "Internal reference"
+    content: "..."
+    disabled: true
+` + "```" + `
+
+## Overrides File
+
+**Optional.** ` + "`.runbook.overrides.yaml`" + ` is a project-local file that lets you override visibility flags without modifying the main config. It is useful for personal or environment-specific settings and is safe to gitignore.
+
+Place it in the project root alongside the ` + "`.runbook/`" + ` directory.
+
+### Structure
+
+` + "```yaml" + `
+tasks:
+  <name-or-glob>:
+    disabled: true
+    disable_mcp: true
+
+workflows:
+  <name-or-glob>:
+    disabled: true
+    disable_mcp: true
+
+resources:
+  <name-or-glob>:
+    disabled: true
+
+prompts:
+  <name-or-glob>:
+    disabled: true
+` + "```" + `
+
+### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| ` + "`tasks`" + ` | map | Overrides for tasks by name or glob |
+| ` + "`workflows`" + ` | map | Overrides for workflows by name or glob |
+| ` + "`resources`" + ` | map | Overrides for resources by name or glob |
+| ` + "`prompts`" + ` | map | Overrides for prompts by name or glob |
+
+Each entry supports:
+- ` + "`disabled`" + ` — hides the item from MCP and CLI
+- ` + "`disable_mcp`" + ` — hides the item from MCP only (tasks and workflows only)
+
+### Glob Patterns
+
+Keys can be glob patterns (e.g., ` + "`debug_*`" + `, ` + "`*_internal`" + `) to match multiple items at once.
+
+### Additive Flags
+
+Override flags are additive: once ` + "`disabled: true`" + ` or ` + "`disable_mcp: true`" + ` is applied (from either the main config or the overrides file), it cannot be unset by the other source.
+
+### Example
+
+` + "```yaml" + `
+# .runbook.overrides.yaml
+tasks:
+  debug_*:
+    disable_mcp: true    # Hide all debug_ tasks from MCP
+
+  legacy_deploy:
+    disabled: true       # Completely hide this task
+
+workflows:
+  experimental_*:
+    disable_mcp: true
+
+prompts:
+  draft_*:
+    disabled: true
+` + "```" + `
 
 ## Complete Example
 
