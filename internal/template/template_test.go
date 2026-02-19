@@ -237,6 +237,63 @@ func TestTaskWrapper(t *testing.T) {
 	}
 }
 
+func TestResolvePromptTemplateTaskFunc(t *testing.T) {
+	tasks := map[string]config.Task{
+		"cr-git-cmd": {
+			Description: "Execute git command",
+			Command:     "git {{.args}}",
+			Type:        config.TaskTypeOneShot,
+		},
+		"cr-detect-languages": {
+			Description: "Detect languages",
+			Command:     "echo detecting",
+			Type:        config.TaskTypeOneShot,
+		},
+	}
+
+	tests := []struct {
+		name      string
+		template  string
+		want      string
+		wantError bool
+	}{
+		{
+			name:     "run_task with hyphenated name",
+			template: `{{run_task "cr-git-cmd"}}`,
+			want:     "run_cr-git-cmd",
+		},
+		{
+			name:     "run_task in sentence",
+			template: `Call {{run_task "cr-detect-languages"}} to detect languages`,
+			want:     "Call run_cr-detect-languages to detect languages",
+		},
+		{
+			name:     "run_task multiple",
+			template: `{{run_task "cr-git-cmd"}} and {{run_task "cr-detect-languages"}}`,
+			want:     "run_cr-git-cmd and run_cr-detect-languages",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ResolvePromptTemplate(tt.template, tasks)
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+			if result != tt.want {
+				t.Errorf("expected %q, got %q", tt.want, result)
+			}
+		})
+	}
+}
+
 func TestPromptTemplateEdgeCases(t *testing.T) {
 	tasks := map[string]config.Task{
 		"task_with_special_chars": {

@@ -2,6 +2,8 @@ project {
   name            = "dev-workflow-mcp"
   agentic_platform = "claude-code"
 
+  update_gitignore = true
+
   agent_instructions = <<EOF
 # Claude Development Guidelines
 
@@ -32,5 +34,3 @@ plugin "base-dev" {}
 plugin "code-review" {}
 
 plugin "typescript" {}
-
-

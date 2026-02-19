@@ -8,13 +8,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"runbookmcp.dev/internal/logs"
 )
 
 // ProcessInfo holds information about a running process
 type ProcessInfo struct {
 	PID       int
-	Cmd       *exec.Cmd
+	OwnerID   string    // UUID of the Manager that started this daemon
+	Cmd       *exec.Cmd // nil for daemons restored from PID files
 	StartTime time.Time
 	LogFile   string
 	SessionID string
@@ -23,23 +25,29 @@ type ProcessInfo struct {
 
 // Manager manages daemon processes
 type Manager struct {
+	ownerID   string // unique ID for this Manager instance
 	processes map[string]*ProcessInfo
 	mu        sync.RWMutex
 }
 
-// NewManager creates a new process manager and restores any daemons that were
-// started by a previous invocation and are still running.
+// NewManager creates a new process manager with a unique owner ID and restores
+// any daemons that are still running from previous invocations.
 func NewManager() *Manager {
 	pm := &Manager{
+		ownerID:   uuid.New().String(),
 		processes: make(map[string]*ProcessInfo),
 	}
 	pm.restoreFromPIDFiles()
 	return pm
 }
 
-// restoreFromPIDFiles scans the pids directory on startup and kills any
-// daemons left behind by a previous server instance (e.g. killed with SIGKILL),
-// then removes their PID files. This ensures clean state on every startup.
+// restoreFromPIDFiles scans the pids directory on startup. For each PID file:
+//   - Dead daemon process: remove the stale file.
+//   - Alive daemon, dead owner process: adopt the orphan (assign to this Manager)
+//     so it can be stopped by the current invocation.
+//   - Alive daemon, alive owner process: restore with the original OwnerID so
+//     that only the owning process can stop it; other Managers can still read
+//     status and logs.
 func (pm *Manager) restoreFromPIDFiles() {
 	files, err := scanPIDFiles()
 	if err != nil {
@@ -48,18 +56,44 @@ func (pm *Manager) restoreFromPIDFiles() {
 	}
 
 	for _, data := range files {
-		if isProcessAlive(data.PID) {
-			// Kill the orphaned process group left by a previous server instance.
-			if err := killProcessGroup(data.PID, syscall.SIGKILL); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to kill orphaned daemon %s (PID %d): %v\n", data.TaskName, data.PID, err)
-			}
-			// Wait up to 2s for the process to be reaped before removing the PID file.
-			deadline := time.Now().Add(2 * time.Second)
-			for time.Now().Before(deadline) && isProcessAlive(data.PID) {
-				time.Sleep(20 * time.Millisecond)
-			}
+		if !isProcessAlive(data.PID) {
+			deletePIDFile(data.TaskName)
+			continue
 		}
-		deletePIDFile(data.TaskName)
+
+		// Determine effective owner. If the process that originally started this
+		// daemon is no longer alive, the daemon is an orphan — adopt it so it
+		// can be managed (stopped) by the current invocation.
+		effectiveOwnerID := data.OwnerID
+		if !isProcessAlive(data.OwnerPID) {
+			effectiveOwnerID = pm.ownerID
+		}
+
+		doneChan := make(chan struct{})
+		pm.processes[data.TaskName] = &ProcessInfo{
+			PID:       data.PID,
+			OwnerID:   effectiveOwnerID,
+			Cmd:       nil,
+			StartTime: data.StartTime,
+			LogFile:   data.LogFile,
+			SessionID: data.SessionID,
+			done:      doneChan,
+		}
+
+		// Poll until the process exits so the map entry and PID file are
+		// cleaned up automatically even if no one explicitly stops it.
+		taskName := data.TaskName
+		pid := data.PID
+		go func() {
+			for isProcessAlive(pid) {
+				time.Sleep(500 * time.Millisecond)
+			}
+			deletePIDFile(taskName)
+			close(doneChan)
+			pm.mu.Lock()
+			delete(pm.processes, taskName)
+			pm.mu.Unlock()
+		}()
 	}
 }
 
@@ -154,6 +188,8 @@ func (pm *Manager) Start(taskName string, sessionID string, cmd string, env map[
 	// Persist PID so subsequent CLI invocations can discover this daemon
 	if err := writePIDFile(pidFileData{
 		PID:       command.Process.Pid,
+		OwnerID:   pm.ownerID,
+		OwnerPID:  os.Getpid(),
 		SessionID: sessionID,
 		TaskName:  taskName,
 		StartTime: startTime,
@@ -167,6 +203,7 @@ func (pm *Manager) Start(taskName string, sessionID string, cmd string, env map[
 	doneChan := make(chan struct{})
 	pm.processes[taskName] = &ProcessInfo{
 		PID:       command.Process.Pid,
+		OwnerID:   pm.ownerID,
 		Cmd:       command,
 		StartTime: startTime,
 		LogFile:   logPath,
@@ -214,7 +251,8 @@ func (pm *Manager) Start(taskName string, sessionID string, cmd string, env map[
 	return nil
 }
 
-// Stop stops a running daemon process
+// Stop stops a running daemon process. Returns an error if the daemon is not
+// running or was started by a different Manager instance (ownership check).
 func (pm *Manager) Stop(taskName string) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
@@ -228,6 +266,12 @@ func (pm *Manager) Stop(taskName string) error {
 	if !isProcessAlive(proc.PID) {
 		delete(pm.processes, taskName)
 		return fmt.Errorf("daemon '%s' is not running", taskName)
+	}
+
+	// Ownership check: only the Manager that started the daemon can stop it.
+	// Other standalone instances can observe (status/logs) but not modify.
+	if proc.OwnerID != pm.ownerID {
+		return fmt.Errorf("daemon '%s' is owned by another runbook process and cannot be stopped from here", taskName)
 	}
 
 	// Send SIGTERM to entire process group
@@ -279,12 +323,15 @@ func (pm *Manager) Status(taskName string) (bool, int, error) {
 	return true, proc.PID, nil
 }
 
-// StopAll stops all running daemon processes
+// StopAll stops all daemon processes owned by this Manager instance.
+// Daemons started by other Manager instances are left running.
 func (pm *Manager) StopAll() error {
 	pm.mu.Lock()
 	names := make([]string, 0, len(pm.processes))
-	for name := range pm.processes {
-		names = append(names, name)
+	for name, proc := range pm.processes {
+		if proc.OwnerID == pm.ownerID {
+			names = append(names, name)
+		}
 	}
 	pm.mu.Unlock()
 

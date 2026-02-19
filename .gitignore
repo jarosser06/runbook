@@ -41,11 +41,11 @@ dist/
 # --- dex managed (do not edit) ---
 .dex/
 dex.lock
+CLAUDE.md
 .claude/skills/commit-messages/SKILL.md
 .claude/agents/cicd.md
 .mcp.json
 .claude/settings.json
-CLAUDE.md
 .claude/skills/code-review/SKILL.md
 .claude/skills/code-review/resources/review-dimensions.md
 .claude/skills/code-review/resources/severity-levels.md
@@ -59,9 +59,11 @@ CLAUDE.md
 .claude/skills/software-engineering/resources/refactoring-strategies.md
 .claude/agents/code-reviewer.md
 .claude/rules/review-standards/review-standards.md
+.dev_workflow/code-review.yaml
 .claude/skills/linting/SKILL.md
 .claude/skills/testing/SKILL.md
 .mcp_tasks/typescript_tasks.yaml
+.dev_workflow/typescript.yaml
 # --- end dex managed ---
 
 server.pid

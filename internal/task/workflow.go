@@ -35,6 +35,9 @@ func (we *WorkflowExecutor) Execute(workflowName string, params map[string]inter
 	// Apply workflow-level parameter defaults
 	resolvedParams := applyWorkflowDefaults(workflow, params)
 
+	// Resolve workflow-level working directory
+	workflowWorkingDir := resolveWorkflowWorkingDirectory(workflow, resolvedParams)
+
 	// Create workflow-level timeout context if configured
 	var ctx context.Context
 	var cancel context.CancelFunc
@@ -75,6 +78,12 @@ func (we *WorkflowExecutor) Execute(workflowName string, params map[string]inter
 
 		// Resolve step params by substituting workflow param values
 		stepParams := resolveStepParams(step.Params, resolvedParams)
+
+		// Inject workflow working directory into step params if set;
+		// tasks with expose_working_directory: true will use it, others ignore it
+		if workflowWorkingDir != "" {
+			stepParams["working_directory"] = workflowWorkingDir
+		}
 
 		// Execute the step task
 		execResult, err := we.executor.Execute(step.Task, stepParams)
@@ -141,6 +150,17 @@ func (we *WorkflowExecutor) Execute(workflowName string, params map[string]inter
 	result.StepsRun = len(workflow.Steps)
 	result.StepsFailed = countFailed(result.Steps)
 	return result, nil
+}
+
+// resolveWorkflowWorkingDirectory determines the working directory for a workflow.
+// Priority: 1) parameter if exposed and provided, 2) static workflow field
+func resolveWorkflowWorkingDirectory(workflow config.Workflow, params map[string]interface{}) string {
+	if workflow.ExposeWorkingDirectory {
+		if wd, ok := params["working_directory"].(string); ok && wd != "" {
+			return wd
+		}
+	}
+	return workflow.WorkingDirectory
 }
 
 // applyWorkflowDefaults merges default workflow parameter values into the provided params

@@ -45,8 +45,6 @@ func cmdList() int {
 		return 0
 	}
 
-	const colGap = 2
-
 	if len(taskNames) > 0 {
 		// Compute column widths from data (no ANSI codes involved).
 		// Include param label lengths in col1 so they never bleed into the TYPE column.

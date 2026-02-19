@@ -13,6 +13,8 @@ const pidsDir = "._dev_tools/pids"
 // pidFileData is what gets persisted to disk for each running daemon.
 type pidFileData struct {
 	PID       int       `json:"pid"`
+	OwnerID   string    `json:"owner_id"`   // UUID of the Manager that started this daemon
+	OwnerPID  int       `json:"owner_pid"`  // OS PID of the process that started this daemon
 	SessionID string    `json:"session_id"`
 	TaskName  string    `json:"task_name"`
 	StartTime time.Time `json:"start_time"`

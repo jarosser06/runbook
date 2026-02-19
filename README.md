@@ -99,6 +99,21 @@ runbook logs dev --filter="ERROR"
 
 Task output goes to stdout (pipeable). Status and metadata go to stderr.
 
+## Prompt Templates
+
+Prompts support Go template syntax. Use `run_task` to reference task tool names — this works with any task name including those containing hyphens:
+
+```yaml
+prompts:
+  dev-workflow:
+    description: "How to work on this project"
+    content: |
+      Run tests: {{run_task "my-tests"}}
+      Start server: {{run_task "dev-server"}}
+```
+
+`{{run_task "my-tests"}}` resolves to `run_my-tests`. For task names without hyphens, dot-access also works: `{{.Tasks.build.Run}}` → `run_build`.
+
 ## Usage with MCP
 
 Add to your `.mcp.json`:

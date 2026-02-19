@@ -46,6 +46,14 @@ func (s *Server) registerWorkflowTool(workflowName string, workflow config.Workf
 		}
 	}
 
+	// Add working_directory parameter if workflow exposes it
+	if workflow.ExposeWorkingDirectory {
+		inputSchema.Properties["working_directory"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Working directory for command execution (overrides workflow working_directory)",
+		}
+	}
+
 	tool := mcp.Tool{
 		Name:        toolName,
 		Description: description,

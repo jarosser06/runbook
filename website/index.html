@@ -1216,10 +1216,10 @@ runbook stop api</code></pre>
       <div class="http-layout">
         <div>
 <pre><code><span class="yc"># Start once, connect from anywhere</span>
-runbook -serve -config .dev_workflow.yaml
+runbook serve
 
 <span class="yc"># or on a custom port</span>
-runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
+runbook serve --addr :9000</code></pre>
           <p style="margin-top:0.75rem">Point each MCP client at <code>http://localhost:9000</code>. All sessions share the same tasks, running daemons, and log history. <code>runbook run build</code> from your terminal proxies through the same server the AI is using.</p>
           <p style="margin-top:0.75rem; font-size:0.875rem">When multiple AI sessions trigger the same one-shot task with identical parameters simultaneously, Runbook deduplicates the execution. One run happens and both sessions receive the result. No redundant builds, no wasted compute.</p>
         </div>
@@ -1319,14 +1319,15 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
 
       <span class="ys">1. Bootstrap the environment: run the setup workflow</span>
       <span class="ys">2. Start backend: <span class="tp">{{.Tasks.api.Start}}</span></span>
-      <span class="ys">3. Start frontend: <span class="tp">{{.Tasks.frontend-dev.Start}}</span></span>
+      <span class="ys">3. Start frontend: <span class="tp">{{run_task "frontend-dev"}}</span></span>
       <span class="ys">4. Run before committing: <span class="tp">{{.Tasks.ci.Run}}</span></span>
       <span class="ys">5. Deploy to staging: <span class="tp">{{.Tasks.deploy.Run}}</span> with env=staging</span>
 
       <span class="ys">To check server health: <span class="tp">{{.Tasks.api.Status}}</span></span>
       <span class="ys">To tail server logs:   <span class="tp">{{.Tasks.api.Logs}}</span></span></code></pre>
       <p>The template variables resolve to actual MCP tool names. <code><span class="tp">{{.Tasks.api.Start}}</span></code> becomes <code>start_api</code>, <code><span class="tp">{{.Tasks.ci.Run}}</span></code> becomes <code>run_workflow_ci</code>. The AI receives concrete tool names it can call directly, not vague descriptions.</p>
-      <p>Available template methods for each task: <code>.Run</code> (oneshot), <code>.Start</code> / <code>.Stop</code> / <code>.Status</code> / <code>.Logs</code> (daemon), <code>.Desc</code> (description text).</p>
+      <p>For task names containing hyphens, use the <code>run_task</code> helper — Go's template engine does not allow hyphens in dot-access chains. <code><span class="tp">{{run_task "my-task"}}</span></code> resolves to <code>run_my-task</code> and works with any task name regardless of what characters it contains.</p>
+      <p>Available template helpers: <code>run_task "name"</code>. Dot-access methods per task: <code>.Run</code> (oneshot), <code>.Start</code> / <code>.Stop</code> / <code>.Status</code> / <code>.Logs</code> (daemon), <code>.Desc</code> (description text). These work for task names without hyphens.</p>
     </section>
 
     <!-- MCP RESOURCES -->
@@ -1412,6 +1413,8 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
             <tr><th>Command</th><th>Description</th></tr>
           </thead>
           <tbody>
+            <tr><td><code>runbook init</code></td><td>Create a minimal <code>.dev_workflow.yaml</code> in the current directory. Skips if one already exists. Also available as the <code>init</code> MCP tool so an AI can bootstrap the config from within a session.</td></tr>
+            <tr><td><code>runbook serve [--addr &lt;addr&gt;]</code></td><td>Run as a standalone HTTP server instead of stdio MCP mode. Enables shared state, CLI auto-proxy, and execution deduplication across sessions. Default address: <code>:8080</code>.</td></tr>
             <tr><td><code>runbook list</code></td><td>List all available tasks and workflows with their types, descriptions, and parameters.</td></tr>
             <tr><td><code>runbook run &lt;task&gt; [--param=value...]</code></td><td>Run a oneshot task or workflow. Parameters passed as <code>--key=value</code> flags.</td></tr>
             <tr><td><code>runbook start &lt;task&gt; [--param=value...]</code></td><td>Start a daemon task in the background.</td></tr>
@@ -1424,18 +1427,18 @@ runbook -serve -addr :9000 -config .dev_workflow.yaml</code></pre>
       </div>
 
       <div class="ref-section">
-        <h3>Server flags</h3>
+        <h3>Global flags</h3>
         <table>
           <thead>
             <tr><th>Flag</th><th>Description</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>-config &lt;path&gt;</code></td><td>Path to a config file or directory. If omitted, Runbook looks for <code>.dev_workflow.yaml</code> or <code>.dev_workflow/</code> in the current directory.</td></tr>
-            <tr><td><code>-init</code></td><td>Create a minimal <code>.dev_workflow.yaml</code> in the current directory and exit. Also available as the <code>init</code> MCP tool. When no config exists, the AI can call it to scaffold a starter config and bootstrap the entire setup from within a session.</td></tr>
-            <tr><td><code>-serve</code></td><td>Run as a standalone HTTP server instead of stdio MCP mode. Enables shared state, CLI auto-proxy, and execution deduplication across sessions.</td></tr>
-            <tr><td><code>-addr &lt;addr&gt;</code></td><td>Listen address for HTTP mode (default: <code>:8080</code>).</td></tr>
+            <tr><td><code>--config &lt;path&gt;</code></td><td>Path to a config file or directory. If omitted, Runbook looks for <code>.dev_workflow.yaml</code> or <code>.dev_workflow/</code> in the current directory.</td></tr>
+            <tr><td><code>--working-dir &lt;path&gt;</code></td><td>Set the project working directory before loading config and running commands.</td></tr>
+            <tr><td><code>--local</code></td><td>Bypass any running HTTP server and execute locally. Useful when you want to run a command in the current process without proxying.</td></tr>
           </tbody>
         </table>
+        <p style="margin-top:0.75rem;font-size:0.875rem">The <code>runbook serve</code> subcommand accepts an additional <code>--addr &lt;addr&gt;</code> flag to set the listen address (default: <code>:8080</code>). Use <code>runbook init</code> to scaffold a starter <code>.dev_workflow.yaml</code> in the current directory.</p>
       </div>
 
       <div class="ref-section">

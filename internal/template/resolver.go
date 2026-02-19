@@ -61,8 +61,12 @@ type TaskTemplateData struct {
 // Uses standard delimiters {{ and }} for template actions
 // Provides task operations through TaskWrapper methods
 func ResolvePromptTemplate(content string, tasks map[string]config.Task) (string, error) {
+	funcs := template.FuncMap{
+		"run_task": func(name string) string { return "run_" + name },
+	}
+
 	// Create template with standard delimiters {{ and }}
-	tmpl, err := template.New("prompt").Parse(content)
+	tmpl, err := template.New("prompt").Funcs(funcs).Parse(content)
 	if err != nil {
 		return "", fmt.Errorf("parse template: %w", err)
 	}

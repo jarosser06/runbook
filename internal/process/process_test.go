@@ -478,10 +478,79 @@ func TestManagerStopAllConcurrent(t *testing.T) {
 	}
 }
 
+// TestNewManagerPreservesDaemonsAcrossInvocations proves that creating a new
+// Manager (what every CLI subcommand does via bootstrap) must NOT kill daemons
+// that are still running. Before the fix, NewManager called restoreFromPIDFiles
+// which SIGKILLed every process it found in the pids directory, so
+// `runbook status api` would kill the daemon it was supposed to report on.
+func TestNewManagerPreservesDaemonsAcrossInvocations(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Errorf("failed to restore working directory: %v", err)
+		}
+	}()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change directory: %v", err)
+	}
+	if err := logs.Setup(); err != nil {
+		t.Fatalf("failed to setup logs: %v", err)
+	}
+
+	// m1 simulates `runbook start api`
+	m1 := NewManager()
+	logPath := logs.GetLogPath("api")
+	if err := m1.Start("api", "sess-1", "sleep 30", nil, "", logPath, ""); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	_, pid, _ := m1.Status("api")
+	if pid == 0 {
+		t.Fatal("daemon did not start")
+	}
+
+	// m2 simulates `runbook status api` — a brand-new process.
+	// The daemon must still be alive; m2 must report it as running.
+	m2 := NewManager()
+
+	if !isProcessAlive(pid) {
+		t.Errorf("BUG: new Manager killed daemon PID %d (was alive before status call)", pid)
+	}
+
+	running, pid2, _ := m2.Status("api")
+	if !running {
+		t.Errorf("BUG: new Manager reports daemon as STOPPED; it should be RUNNING")
+	}
+	if pid2 != pid {
+		t.Errorf("BUG: PID mismatch after restore: got %d, want %d", pid2, pid)
+	}
+
+	// m3 simulates `runbook stop api` from yet another standalone invocation.
+	// It does not own the daemon, so stop must be rejected.
+	m3 := NewManager()
+	if err := m3.Stop("api"); err == nil {
+		t.Error("non-owner Stop should have returned an error")
+	}
+	if !isProcessAlive(pid) {
+		t.Errorf("daemon PID %d was killed by a non-owner Manager", pid)
+	}
+
+	// Only m1 (the owner) can stop it.
+	if err := m1.Stop("api"); err != nil {
+		t.Errorf("owner Manager failed to stop daemon: %v", err)
+	}
+	if isProcessAlive(pid) {
+		t.Errorf("daemon PID %d still alive after owner stopped it", pid)
+	}
+}
+
+// TestPIDFileRestoreAcrossManagerInstances verifies that stale PID files for
+// dead processes are cleaned up on startup, and that the PID file for a still-
+// running daemon is preserved so subsequent Managers can find it.
 func TestPIDFileRestoreAcrossManagerInstances(t *testing.T) {
-	// Simulates a server being killed with SIGKILL (leaving orphaned daemons +
-	// PID files on disk). The next manager startup must kill those orphans and
-	// remove their PID files so the system starts with a clean slate.
 	tmpDir := t.TempDir()
 	oldWd, err := os.Getwd()
 	if err != nil {
@@ -501,7 +570,7 @@ func TestPIDFileRestoreAcrossManagerInstances(t *testing.T) {
 		t.Fatalf("failed to setup logs: %v", err)
 	}
 
-	// Manager 1: start the daemon (simulates previous server instance)
+	// Manager 1: start a daemon.
 	m1 := NewManager()
 	logPath := logs.GetLogPath("persist-daemon")
 	if err := m1.Start("persist-daemon", "test-session-id", "sleep 30", nil, "", logPath, ""); err != nil {
@@ -512,24 +581,34 @@ func TestPIDFileRestoreAcrossManagerInstances(t *testing.T) {
 	if err != nil || !running || pid == 0 {
 		t.Fatalf("expected running daemon, got running=%v pid=%d err=%v", running, pid, err)
 	}
-	t.Logf("Orphaned daemon PID: %d", pid)
+	t.Logf("daemon PID: %d", pid)
 
-	// Manager 2: simulates new server startup after previous was SIGKILL'd.
-	// Must kill the orphaned process and remove PID files.
+	// Manager 2: simulates a new CLI invocation (e.g. `runbook status`).
+	// The daemon must still be alive and visible as running.
 	m2 := NewManager()
 
-	// Orphan should be dead
-	if isProcessAlive(pid) {
-		t.Errorf("expected orphaned daemon PID %d to be killed by new manager startup", pid)
+	if !isProcessAlive(pid) {
+		t.Errorf("new Manager killed daemon PID %d — it should have been restored", pid)
 	}
-
-	// Manager 2 should not see the daemon as running
 	running2, _, _ := m2.Status("persist-daemon")
-	if running2 {
-		t.Errorf("Manager 2 should not see orphaned daemon as running after cleanup")
+	if !running2 {
+		t.Errorf("Manager 2 should see daemon as running after restore")
 	}
 
-	// Manager 3: PID file should be gone, clean state
+	// m2 does not own the daemon — stop must be refused.
+	if err := m2.Stop("persist-daemon"); err == nil {
+		t.Error("non-owner Stop should have returned an error")
+	}
+	if !isProcessAlive(pid) {
+		t.Errorf("daemon PID %d was killed by non-owner m2", pid)
+	}
+
+	// Only the owner (m1) can stop it.
+	if err := m1.Stop("persist-daemon"); err != nil {
+		t.Errorf("owner m1 failed to stop daemon: %v", err)
+	}
+
+	// Manager 3: daemon is gone, PID file should be cleaned up.
 	m3 := NewManager()
 	running3, _, _ := m3.Status("persist-daemon")
 	if running3 {
@@ -742,4 +821,166 @@ func execCommand(name string, args ...string) ([]byte, error) {
 func killProcess(pid int) error {
 	cmd := exec.Command("kill", "-9", fmt.Sprintf("%d", pid))
 	return cmd.Run()
+}
+
+// TestOwnershipStopRejected validates that a Manager cannot stop a daemon it
+// did not start, but can still observe its status and it remains running.
+func TestOwnershipStopRejected(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, _ := os.Getwd()
+	defer func() { _ = os.Chdir(oldWd) }()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	if err := logs.Setup(); err != nil {
+		t.Fatalf("logs setup: %v", err)
+	}
+
+	owner := NewManager()
+	logPath := logs.GetLogPath("svc")
+	if err := owner.Start("svc", "sess-owner", "sleep 30", nil, "", logPath, ""); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	_, pid, _ := owner.Status("svc")
+
+	// Non-owner tries to stop — must be rejected and daemon must stay alive.
+	other := NewManager()
+	if err := other.Stop("svc"); err == nil {
+		t.Error("non-owner Stop should have returned an error")
+	}
+	if !isProcessAlive(pid) {
+		t.Errorf("daemon PID %d killed by non-owner", pid)
+	}
+
+	// Non-owner can still read status.
+	running, _, _ := other.Status("svc")
+	if !running {
+		t.Error("non-owner should be able to observe status of running daemon")
+	}
+
+	// Owner can stop it.
+	if err := owner.Stop("svc"); err != nil {
+		t.Errorf("owner Stop failed: %v", err)
+	}
+	if isProcessAlive(pid) {
+		t.Errorf("daemon PID %d still alive after owner stopped it", pid)
+	}
+}
+
+// TestOrphanAdoption verifies that when the process that started a daemon is
+// dead (e.g. SIGKILL'd), a new Manager adopts the orphaned daemon and can
+// stop it. This covers the real-world case where `runbook start api` exits
+// normally (making the daemon orphaned from the start) and any subsequent
+// `runbook stop api` invocation must be able to stop it.
+func TestOrphanAdoption(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, _ := os.Getwd()
+	defer func() { _ = os.Chdir(oldWd) }()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	if err := logs.Setup(); err != nil {
+		t.Fatalf("logs setup: %v", err)
+	}
+
+	// Start a daemon with m1.
+	m1 := NewManager()
+	logPath := logs.GetLogPath("orphan-svc")
+	if err := m1.Start("orphan-svc", "sess-orphan", "sleep 30", nil, "", logPath, ""); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	_, pid, _ := m1.Status("orphan-svc")
+	if pid == 0 {
+		t.Fatal("daemon did not start")
+	}
+
+	// Simulate the owning process being dead by overwriting the PID file
+	// with a dead OwnerPID. PID 1 is always alive (launchd/init), so we use
+	// an unlikely PID instead. Using the daemon's own PID as a dead owner
+	// would conflict, so use a clearly-dead PID.
+	deadOwnerPID := 999997 // almost certainly dead
+	if err := writePIDFile(pidFileData{
+		PID:       pid,
+		OwnerID:   "dead-owner-uuid",
+		OwnerPID:  deadOwnerPID,
+		SessionID: "sess-orphan",
+		TaskName:  "orphan-svc",
+		StartTime: time.Now(),
+		LogFile:   logPath,
+	}); err != nil {
+		t.Fatalf("write fake PID file: %v", err)
+	}
+
+	// m2 simulates a fresh CLI invocation after the original owner is dead.
+	// It must adopt the orphan and be able to stop it.
+	m2 := NewManager()
+
+	// Daemon must still be alive (restore doesn't kill it).
+	if !isProcessAlive(pid) {
+		t.Fatalf("daemon PID %d was killed during restore — orphan was not adopted, it was killed", pid)
+	}
+
+	// m2 must report it as running.
+	running, pid2, _ := m2.Status("orphan-svc")
+	if !running {
+		t.Error("m2 should see the orphaned daemon as running")
+	}
+	if pid2 != pid {
+		t.Errorf("PID mismatch: got %d, want %d", pid2, pid)
+	}
+
+	// m2 must be able to stop the adopted orphan.
+	if err := m2.Stop("orphan-svc"); err != nil {
+		t.Errorf("m2 failed to stop adopted orphan: %v", err)
+	}
+	if isProcessAlive(pid) {
+		t.Errorf("daemon PID %d still alive after adopted stop", pid)
+	}
+}
+
+// TestStopAllOnlyKillsOwnedDaemons ensures StopAll does not touch daemons
+// owned by other Manager instances.
+func TestStopAllOnlyKillsOwnedDaemons(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldWd, _ := os.Getwd()
+	defer func() { _ = os.Chdir(oldWd) }()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	if err := logs.Setup(); err != nil {
+		t.Fatalf("logs setup: %v", err)
+	}
+
+	// m1 starts daemon-a.
+	m1 := NewManager()
+	logA := logs.GetLogPath("daemon-a")
+	if err := m1.Start("daemon-a", "sess-a", "sleep 30", nil, "", logA, ""); err != nil {
+		t.Fatalf("start daemon-a: %v", err)
+	}
+	_, pidA, _ := m1.Status("daemon-a")
+
+	// m2 starts daemon-b and then calls StopAll.
+	m2 := NewManager()
+	logB := logs.GetLogPath("daemon-b")
+	if err := m2.Start("daemon-b", "sess-b", "sleep 30", nil, "", logB, ""); err != nil {
+		t.Fatalf("start daemon-b: %v", err)
+	}
+	_, pidB, _ := m2.Status("daemon-b")
+
+	if err := m2.StopAll(); err != nil {
+		t.Fatalf("StopAll: %v", err)
+	}
+
+	// daemon-b (owned by m2) must be dead.
+	if isProcessAlive(pidB) {
+		t.Errorf("daemon-b PID %d still alive after StopAll by its owner", pidB)
+	}
+
+	// daemon-a (owned by m1) must still be running.
+	if !isProcessAlive(pidA) {
+		t.Errorf("daemon-a PID %d was killed by a StopAll from a non-owner", pidA)
+	}
+
+	// Cleanup.
+	_ = m1.Stop("daemon-a")
 }

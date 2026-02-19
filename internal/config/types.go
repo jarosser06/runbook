@@ -75,10 +75,12 @@ type Defaults struct {
 
 // Workflow represents a composite workflow that runs multiple tasks sequentially
 type Workflow struct {
-	Description string           `yaml:"description"`
-	Timeout     int              `yaml:"timeout"`
-	Parameters  map[string]Param `yaml:"parameters"`
-	Steps       []WorkflowStep   `yaml:"steps"`
+	Description            string           `yaml:"description"`
+	Timeout                int              `yaml:"timeout"`
+	Parameters             map[string]Param `yaml:"parameters"`
+	Steps                  []WorkflowStep   `yaml:"steps"`
+	WorkingDirectory       string           `yaml:"working_directory"`
+	ExposeWorkingDirectory bool             `yaml:"expose_working_directory"`
 }
 
 // WorkflowStep represents a single step in a workflow
