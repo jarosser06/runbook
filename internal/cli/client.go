@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -11,6 +12,7 @@ import (
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"runbookmcp.dev/internal/mcputil"
+	"runbookmcp.dev/internal/task"
 )
 
 // newMCPClient creates, starts, and initializes an MCP HTTP client against addr.
@@ -143,6 +145,7 @@ func remoteRun(ctx context.Context, c *mcpclient.Client, args []string) int {
 	}
 	taskName := args[0]
 	params := parseRawParams(args[1:])
+	params["max_output_lines"] = float64(0) // request unlimited output for CLI
 
 	// Try oneshot tool first.
 	code, found := callTool(ctx, c, "run_"+taskName, params)
@@ -202,13 +205,103 @@ func callTool(ctx context.Context, c *mcpclient.Client, toolName string, params 
 
 	for _, content := range result.Content {
 		if tc, ok := mcp.AsTextContent(content); ok {
-			fmt.Println(tc.Text)
+			if result.IsError {
+				fmt.Fprintln(os.Stderr, tc.Text)
+			} else {
+				printRemoteResult(toolName, tc.Text)
+			}
 		}
 	}
 	if result.IsError {
 		return 1, true
 	}
 	return 0, true
+}
+
+// remoteOneShotResponse mirrors the server's private oneShotResponse for JSON decoding.
+type remoteOneShotResponse struct {
+	TaskName        string `json:"task_name"`
+	SessionID       string `json:"session_id"`
+	Success         bool   `json:"success"`
+	ExitCode        int    `json:"exit_code"`
+	Duration        string `json:"duration"`
+	Error           string `json:"error"`
+	TimedOut        bool   `json:"timed_out"`
+	Stdout          string `json:"stdout"`
+	StdoutTruncated bool   `json:"stdout_truncated"`
+	Stderr          string `json:"stderr"`
+	StderrTruncated bool   `json:"stderr_truncated"`
+}
+
+// printRemoteOneShotResponse formats a remote oneshot result like printExecutionResult.
+func printRemoteOneShotResponse(r *remoteOneShotResponse) {
+	if r.Stdout != "" {
+		fmt.Print(r.Stdout)
+		if !strings.HasSuffix(r.Stdout, "\n") {
+			fmt.Println()
+		}
+	}
+	if r.Stderr != "" {
+		fmt.Fprint(os.Stderr, r.Stderr)
+		if !strings.HasSuffix(r.Stderr, "\n") {
+			fmt.Fprintln(os.Stderr)
+		}
+	}
+	fmt.Fprintln(os.Stderr)
+	switch {
+	case r.Success:
+		fmt.Fprintf(os.Stderr, "%s  %s\n", color(colorGreen+colorBold, "[OK]"), color(colorDim, r.Duration))
+	case r.TimedOut:
+		fmt.Fprintf(os.Stderr, "%s  %s\n", color(colorYellow+colorBold, "[TIMEOUT]"), color(colorDim, r.Duration))
+	default:
+		fmt.Fprintf(os.Stderr, "%s  exit code %d  %s\n", color(colorRed+colorBold, "[FAIL]"), r.ExitCode, color(colorDim, r.Duration))
+	}
+	if r.Error != "" {
+		fmt.Fprintf(os.Stderr, "%s %s\n", color(colorRed, "Error:"), r.Error)
+	}
+	if r.SessionID != "" {
+		fmt.Fprintf(os.Stderr, "%s %s\n", color(colorDim, "Session:"), r.SessionID)
+	}
+	if r.StdoutTruncated || r.StderrTruncated {
+		fmt.Fprintf(os.Stderr, "%s output truncated (use logs for full output)\n", color(colorDim, "Note:"))
+	}
+}
+
+// printRemoteResult dispatches formatted printing based on the tool name prefix.
+func printRemoteResult(toolName, text string) {
+	switch {
+	case strings.HasPrefix(toolName, "run_workflow_"):
+		var r task.WorkflowResult
+		if json.Unmarshal([]byte(text), &r) == nil {
+			printWorkflowResult(&r)
+			return
+		}
+	case strings.HasPrefix(toolName, "run_"):
+		var r remoteOneShotResponse
+		if json.Unmarshal([]byte(text), &r) == nil {
+			printRemoteOneShotResponse(&r)
+			return
+		}
+	case strings.HasPrefix(toolName, "start_"):
+		var r task.DaemonStartResult
+		if json.Unmarshal([]byte(text), &r) == nil {
+			printDaemonStartResult(&r)
+			return
+		}
+	case strings.HasPrefix(toolName, "stop_"):
+		var r task.DaemonStopResult
+		if json.Unmarshal([]byte(text), &r) == nil {
+			printDaemonStopResult(&r)
+			return
+		}
+	case strings.HasPrefix(toolName, "status_"):
+		var r task.DaemonStatus
+		if json.Unmarshal([]byte(text), &r) == nil {
+			printDaemonStatus(&r)
+			return
+		}
+	}
+	fmt.Println(text) // fallback for unknown tools or parse failure
 }
 
 // parseRawParams parses --key=value and --key value flags into a map.

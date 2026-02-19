@@ -111,6 +111,12 @@ func (s *Server) registerOneShotTool(taskName string, task config.Task) {
 		}
 	}
 
+	// Add max_output_lines parameter for clients that want unlimited output
+	inputSchema.Properties["max_output_lines"] = map[string]interface{}{
+		"type":        "number",
+		"description": "Maximum output lines to return per stream (default 100, 0=unlimited). For CLI use.",
+	}
+
 	tool := mcp.Tool{
 		Name:        toolName,
 		Description: task.Description,
@@ -120,13 +126,20 @@ func (s *Server) registerOneShotTool(taskName string, task config.Task) {
 	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		params := req.GetArguments()
 
+		// Read and remove max_output_lines before passing to task executor
+		maxLines := mcpOutputMaxLines
+		if v, ok := params["max_output_lines"].(float64); ok {
+			maxLines = int(v)
+			delete(params, "max_output_lines")
+		}
+
 		result, err := s.manager.ExecuteOneShot(taskName, params)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		stdout, stdoutShown, stdoutTotal := truncateToLines(result.Stdout, mcpOutputMaxLines)
-		stderr, stderrShown, stderrTotal := truncateToLines(result.Stderr, mcpOutputMaxLines)
+		stdout, stdoutShown, stdoutTotal := truncateToLines(result.Stdout, maxLines)
+		stderr, stderrShown, stderrTotal := truncateToLines(result.Stderr, maxLines)
 
 		resp := oneShotResponse{
 			TaskName:         result.TaskName,
