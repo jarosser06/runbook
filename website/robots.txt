@@ -1,3 +1,3 @@
 User-agent: *
 Allow: /
-Sitemap: https://runbook.dev/sitemap.xml
+Sitemap: https://runbookmcp.dev/sitemap.xml

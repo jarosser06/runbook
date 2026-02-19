@@ -1,7 +1,7 @@
 # install.ps1 - Install runbook binary on Windows
 #
 # Usage:
-#   irm https://runbook.dev/install.ps1 | iex
+#   irm https://runbookmcp.dev/install.ps1 | iex
 #   .\install.ps1 -Version 0.1.0
 
 param(
@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 # Ensure TLS 1.2
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-$ArtifactsUrl = "https://runbook.dev"
+$ArtifactsUrl = "https://runbookmcp.dev"
 $InstallDir = "$HOME\.bin"
 $BinaryName = "runbook.exe"
 
