@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"runbookmcp.dev/internal/dirs"
 )
 
 func TestWriteAndReadServerFile(t *testing.T) {
@@ -36,7 +38,7 @@ func TestReadServerFileWithWorkingDir(t *testing.T) {
 	dir := t.TempDir()
 
 	// Write into a specific directory.
-	devToolsDir := filepath.Join(dir, "._dev_tools")
+	devToolsDir := filepath.Join(dir, dirs.StateDir)
 	if err := os.MkdirAll(devToolsDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +97,7 @@ func TestServerFilePathEmptyDir(t *testing.T) {
 
 func TestServerFilePathWithDir(t *testing.T) {
 	got := serverFilePath("/some/project")
-	want := "/some/project/._dev_tools/server.json"
+	want := filepath.Join("/some/project", ServerRegistryFile)
 	if got != want {
 		t.Errorf("serverFilePath = %q, want %q", got, want)
 	}

@@ -35,6 +35,7 @@ type Task struct {
 	Parameters             map[string]Param  `yaml:"parameters"`
 	DependsOn              []string          `yaml:"depends_on"`
 	DisableMCP             bool              `yaml:"disable_mcp,omitempty"`
+	Disabled               bool              `yaml:"disabled,omitempty"`
 }
 
 // Param represents a task parameter definition
@@ -56,6 +57,8 @@ type Prompt struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
 	Content     string `yaml:"content"`
+	File        string `yaml:"file"`
+	Disabled    bool   `yaml:"disabled,omitempty"`
 }
 
 // Resource represents a custom MCP resource with either inline or file-based content
@@ -64,6 +67,7 @@ type Resource struct {
 	Content     string `yaml:"content"`
 	File        string `yaml:"file"`
 	MIMEType    string `yaml:"mime_type"`
+	Disabled    bool   `yaml:"disabled,omitempty"`
 }
 
 // Defaults represents default values for task configuration
@@ -81,6 +85,8 @@ type Workflow struct {
 	Steps                  []WorkflowStep   `yaml:"steps"`
 	WorkingDirectory       string           `yaml:"working_directory"`
 	ExposeWorkingDirectory bool             `yaml:"expose_working_directory"`
+	DisableMCP             bool             `yaml:"disable_mcp,omitempty"`
+	Disabled               bool             `yaml:"disabled,omitempty"`
 }
 
 // WorkflowStep represents a single step in a workflow
@@ -88,4 +94,21 @@ type WorkflowStep struct {
 	Task              string            `yaml:"task"`
 	Params            map[string]string `yaml:"params"`
 	ContinueOnFailure bool             `yaml:"continue_on_failure"`
+}
+
+// ItemOverride controls visibility for any manifest item.
+// For tasks/workflows: disable_mcp hides from MCP only; disabled hides from everything.
+// For resources/prompts (MCP-only): both flags have the same effect.
+type ItemOverride struct {
+	DisableMCP bool `yaml:"disable_mcp,omitempty"`
+	Disabled   bool `yaml:"disabled,omitempty"`
+}
+
+// Overrides represents the optional .runbook.overrides.yaml file contents.
+// It cannot change task definitions — only control visibility.
+type Overrides struct {
+	Tasks     map[string]ItemOverride `yaml:"tasks"`
+	Workflows map[string]ItemOverride `yaml:"workflows"`
+	Resources map[string]ItemOverride `yaml:"resources"`
+	Prompts   map[string]ItemOverride `yaml:"prompts"`
 }

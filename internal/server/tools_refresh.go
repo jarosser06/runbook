@@ -99,7 +99,7 @@ func (s *Server) collectToolNames() []string {
 
 	// Task-derived tools
 	for taskName, taskDef := range s.manifest.Tasks {
-		if taskDef.DisableMCP {
+		if taskDef.Disabled || taskDef.DisableMCP {
 			continue
 		}
 		switch taskDef.Type {
@@ -111,7 +111,10 @@ func (s *Server) collectToolNames() []string {
 	}
 
 	// Workflow-derived tools
-	for workflowName := range s.manifest.Workflows {
+	for workflowName, workflowDef := range s.manifest.Workflows {
+		if workflowDef.Disabled || workflowDef.DisableMCP {
+			continue
+		}
 		names = append(names, "run_workflow_"+workflowName)
 	}
 

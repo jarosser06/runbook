@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"runbookmcp.dev/internal/template"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -329,7 +330,7 @@ tasks:
 		mcp.NewResource(
 			"dev-workflow://docs/configuration",
 			"Configuration Documentation",
-			mcp.WithResourceDescription("Complete guide to the .dev_workflow.yaml configuration file"),
+			mcp.WithResourceDescription("Complete guide to the .runbook/ configuration directory"),
 		),
 		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 			doc := `# Dev Workflow MCP - Configuration Guide
@@ -342,8 +343,7 @@ The Dev Workflow MCP server reads task definitions from a YAML manifest file. Th
 
 The server searches for configuration files in this order:
 1. Custom path specified with ` + "`-config <path>`" + ` flag
-2. ` + "`./.dev_workflow.yaml`" + ` in the project root
-3. ` + "`./.dev_workflow/`" + ` directory
+2. ` + "`./.runbook/`" + ` directory (all *.yaml files merged)
 
 ## Basic Structure
 
@@ -849,9 +849,8 @@ tasks:
 
 **Error:** ` + "`no task manifest found`" + `
 
-**Solution:** Ensure your config file is in one of these locations:
-- ` + "`./.dev_workflow.yaml`" + `
-- ` + "`./.dev_workflow/`" + `
+**Solution:** Ensure your config directory exists:
+- ` + "`./.runbook/`" + ` directory with *.yaml files
 - Or specify with ` + "`-config <path>`" + ` flag
 
 ### Invalid YAML Syntax
@@ -883,9 +882,9 @@ tasks:
 
 ## Resources
 
-- Template documentation: ` + "`dev-workflow://docs/templates`" + `
-- Task groups: ` + "`dev-workflow://task-groups`" + `
-- Task dependencies: ` + "`dev-workflow://task-dependencies`" + `
+- Template documentation: ` + "`runbook://docs/templates`" + `
+- Task groups: ` + "`runbook://task-groups`" + `
+- Task dependencies: ` + "`runbook://task-dependencies`" + `
 `
 			return []mcp.ResourceContents{
 				mcp.TextResourceContents{
@@ -904,6 +903,10 @@ tasks:
 // registerCustomResources registers user-defined resources from the manifest
 func (s *Server) registerCustomResources() {
 	for resourceName, resourceDef := range s.manifest.Resources {
+		if resourceDef.Disabled {
+			continue
+		}
+
 		name := resourceName
 		def := resourceDef
 
@@ -912,7 +915,7 @@ func (s *Server) registerCustomResources() {
 			mimeType = "text/markdown"
 		}
 
-		uri := "dev-workflow://custom/" + name
+		uri := "runbook://custom/" + name
 
 		var opts []mcp.ResourceOption
 		opts = append(opts, mcp.WithResourceDescription(def.Description))
@@ -921,8 +924,19 @@ func (s *Server) registerCustomResources() {
 		s.mcpServer.AddResource(
 			mcp.NewResource(uri, name, opts...),
 			func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+				var rawContent string
+				if def.File != "" {
+					data, err := os.ReadFile(def.File)
+					if err != nil {
+						return nil, fmt.Errorf("failed to read resource file %s: %w", def.File, err)
+					}
+					rawContent = string(data)
+				} else {
+					rawContent = def.Content
+				}
+
 				// Resolve template variables in content
-				resolvedContent, err := template.ResolvePromptTemplate(def.Content, s.manifest.Tasks)
+				resolvedContent, err := template.ResolvePromptTemplate(rawContent, s.manifest.Tasks)
 				if err != nil {
 					return nil, fmt.Errorf("failed to resolve resource template: %w", err)
 				}

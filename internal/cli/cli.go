@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"runbookmcp.dev/internal/config"
+	"runbookmcp.dev/internal/dirs"
 	"runbookmcp.dev/internal/logs"
 	"runbookmcp.dev/internal/process"
 	"runbookmcp.dev/internal/server"
@@ -46,7 +47,7 @@ func newMCPServer(v string) (*server.Server, *process.Manager, error) {
 	}
 	if !loaded {
 		fmt.Fprintln(os.Stderr, "Warning: No config file found. Server starting with empty configuration.")
-		fmt.Fprintln(os.Stderr, "Create .dev_workflow.yaml or .dev_workflow/ directory, or use --config flag")
+		fmt.Fprintf(os.Stderr, "Create %s/ directory with YAML files, or use --config flag\n", dirs.ConfigDir)
 	}
 
 	processManager := process.NewManager()
@@ -178,7 +179,7 @@ func bootstrap(configPath string) (*config.Manifest, *task.Manager, *process.Man
 		return nil, nil, nil, fmt.Errorf("failed to load config: %w", err)
 	}
 	if !loaded {
-		return nil, nil, nil, fmt.Errorf("no config file found (use --config or create .dev_workflow.yaml)")
+		return nil, nil, nil, fmt.Errorf("no config file found (use --config or create %s/ directory)", dirs.ConfigDir)
 	}
 
 	processManager := process.NewManager()
@@ -379,9 +380,12 @@ task_groups:
 `
 
 func handleInit() error {
-	targetPath := "./.dev_workflow.yaml"
+	targetPath := "./" + dirs.ConfigDir + "/tasks.yaml"
 	if _, err := os.Stat(targetPath); err == nil {
 		return fmt.Errorf("%s already exists (remove it or use the MCP 'init' tool with overwrite=true)", targetPath)
+	}
+	if err := os.MkdirAll(dirs.ConfigDir, 0755); err != nil {
+		return fmt.Errorf("failed to create %s directory: %w", dirs.ConfigDir, err)
 	}
 	if err := os.WriteFile(targetPath, []byte(minimalConfig), 0644); err != nil {
 		return fmt.Errorf("failed to create config file: %w", err)

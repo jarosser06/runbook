@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"runbookmcp.dev/internal/config"
+	"runbookmcp.dev/internal/dirs"
 )
 
 // resetGlobals resets package-level state between tests to avoid cross-test contamination.
@@ -613,7 +614,7 @@ func TestHandleInit(t *testing.T) {
 			t.Fatalf("handleInit() returned error: %v", err)
 		}
 
-		data, err := os.ReadFile(filepath.Join(tmp, ".dev_workflow.yaml"))
+		data, err := os.ReadFile(filepath.Join(tmp, dirs.ConfigDir, "tasks.yaml"))
 		if err != nil {
 			t.Fatalf("config file not created: %v", err)
 		}
@@ -631,7 +632,10 @@ func TestHandleInit(t *testing.T) {
 		}
 
 		// Create the file first.
-		if err := os.WriteFile(filepath.Join(tmp, ".dev_workflow.yaml"), []byte("existing"), 0644); err != nil {
+		if err := os.MkdirAll(filepath.Join(tmp, dirs.ConfigDir), 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(tmp, dirs.ConfigDir, "tasks.yaml"), []byte("existing"), 0644); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
 
@@ -769,7 +773,10 @@ tasks:
     command: "go build ./..."
     type: oneshot
 `
-	if err := os.WriteFile(filepath.Join(tmp, ".dev_workflow.yaml"), []byte(manifest), 0644); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, dirs.ConfigDir), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, dirs.ConfigDir, "tasks.yaml"), []byte(manifest), 0644); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
 

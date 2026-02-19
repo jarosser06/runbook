@@ -43,8 +43,11 @@ func TestSetup(t *testing.T) {
 		t.Errorf("failed to read .gitignore: %v", err)
 	}
 
-	if !strings.Contains(string(content), "logs/") {
-		t.Errorf("expected .gitignore to contain 'logs/', got: %s", content)
+	if !strings.Contains(string(content), "*") {
+		t.Errorf("expected .gitignore to contain '*', got: %s", content)
+	}
+	if !strings.Contains(string(content), "!.gitignore") {
+		t.Errorf("expected .gitignore to contain '!.gitignore', got: %s", content)
 	}
 
 	// Run Setup again to ensure it's idempotent

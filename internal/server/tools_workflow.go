@@ -13,6 +13,9 @@ import (
 // registerWorkflowTools registers all workflows as MCP tools
 func (s *Server) registerWorkflowTools() {
 	for workflowName, workflow := range s.manifest.Workflows {
+		if workflow.Disabled || workflow.DisableMCP {
+			continue
+		}
 		s.registerWorkflowTool(workflowName, workflow)
 	}
 }

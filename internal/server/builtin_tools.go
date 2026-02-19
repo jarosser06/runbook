@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"runbookmcp.dev/internal/dirs"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -47,13 +48,13 @@ func (s *Server) registerBuiltInTools() {
 func (s *Server) registerInitTool() {
 	tool := mcp.Tool{
 		Name:        "init",
-		Description: "Initialize a new .dev_workflow.yaml configuration file",
+		Description: "Initialize a new runbook configuration directory (.runbook/)",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
 				"path": map[string]interface{}{
 					"type":        "string",
-					"description": "Target path for config file (default: ./.dev_workflow.yaml)",
+					"description": "Target path for config file (default: ./" + dirs.ConfigDir + "/tasks.yaml)",
 				},
 				"overwrite": map[string]interface{}{
 					"type":        "boolean",
@@ -66,8 +67,8 @@ func (s *Server) registerInitTool() {
 	handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := req.GetArguments()
 
-		// Get path parameter (default to ./.dev_workflow.yaml)
-		targetPath := "./.dev_workflow.yaml"
+		// Get path parameter (default to ./<ConfigDir>/tasks.yaml)
+		targetPath := "./" + dirs.ConfigDir + "/tasks.yaml"
 		if path, ok := args["path"].(string); ok && path != "" {
 			targetPath = path
 		}

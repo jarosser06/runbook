@@ -5,13 +5,17 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"runbookmcp.dev/internal/dirs"
 )
 
 // LoadManifest loads and validates a task manifest from a file or directory.
 // It searches for the manifest in the following priority order:
 // 1. Custom path (if provided) — can be a file or directory
-// 2. ./.dev_workflow.yaml (single file)
-// 3. ./.dev_workflow/ directory (auto-loads all *.yaml files)
+// 2. ./.runbook/ directory (auto-loads all *.yaml files)
+//
+// After loading, it also looks for .runbook.overrides.yaml in CWD and applies
+// any overrides found there.
 //
 // Returns:
 //   - manifest: The loaded manifest, or an empty manifest if none found
@@ -25,23 +29,16 @@ func LoadManifest(customPath string) (*Manifest, bool, error) {
 			return nil, false, err
 		}
 		if manifest != nil {
-			return manifest, true, nil
+			return applyOverridesIfPresent(manifest, true)
 		}
 		// Custom path didn't exist — fall through to defaults
 	}
 
-	// Try .dev_workflow.yaml single file
-	if manifest, err := loadFromFile("./.dev_workflow.yaml"); err != nil {
+	// Try config directory
+	if manifest, err := LoadFromDirectory("./" + dirs.ConfigDir); err != nil {
 		return nil, false, err
 	} else if manifest != nil {
-		return manifest, true, nil
-	}
-
-	// Try .dev_workflow/ directory
-	if manifest, err := LoadFromDirectory("./.dev_workflow"); err != nil {
-		return nil, false, err
-	} else if manifest != nil {
-		return manifest, true, nil
+		return applyOverridesIfPresent(manifest, true)
 	}
 
 	// No manifest found - return empty manifest instead of error
@@ -52,6 +49,19 @@ func LoadManifest(customPath string) (*Manifest, bool, error) {
 	}
 
 	return emptyManifest, false, nil
+}
+
+// applyOverridesIfPresent loads .runbook.overrides.yaml from CWD (if it exists)
+// and applies it to the manifest. Returns the manifest with loaded=true.
+func applyOverridesIfPresent(manifest *Manifest, loaded bool) (*Manifest, bool, error) {
+	overrides, err := LoadOverrides("./" + dirs.OverridesFile)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to load overrides: %w", err)
+	}
+	if overrides != nil {
+		ApplyOverrides(manifest, overrides)
+	}
+	return manifest, loaded, nil
 }
 
 // loadFromPath loads a manifest from a path that may be a file or directory.

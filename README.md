@@ -25,12 +25,22 @@ make build
 The server looks for configuration in this order:
 
 1. Path given via `-config` flag (file or directory)
-2. `.dev_workflow.yaml` in the current directory
-3. `.dev_workflow/` directory — all `*.yaml` files are merged automatically
+2. `.runbook/` directory — all `*.yaml` files are merged automatically
 
-### Single file
+Create a `.runbook/` directory with one or more YAML files:
 
-Create `.dev_workflow.yaml`:
+```
+.runbook/
+  tasks.yaml
+  daemons.yaml
+  prompts.yaml
+```
+
+Each file is a standard manifest. They are merged together — task names, workflow names, and prompt names must be unique across files.
+
+### Example
+
+`.runbook/tasks.yaml`:
 
 ```yaml
 version: "1.0"
@@ -46,19 +56,6 @@ tasks:
     command: "npm run dev"
     type: daemon
 ```
-
-### Directory
-
-Split config across files in `.dev_workflow/`:
-
-```
-.dev_workflow/
-  tasks.yaml
-  daemons.yaml
-  prompts.yaml
-```
-
-Each file is a standard manifest. They are merged together — task names, group names, and prompt names must be unique across files.
 
 ## CLI Usage
 

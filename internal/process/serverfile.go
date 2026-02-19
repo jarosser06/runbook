@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"runbookmcp.dev/internal/dirs"
 )
 
 // ServerRegistryFile is the path (relative to the project root) where the HTTP
 // server writes its address and PID when it starts.
-const ServerRegistryFile = "._dev_tools/server.json"
+const ServerRegistryFile = dirs.StateDir + "/server.json"
 
 // ServerFileData is persisted to disk when the HTTP server starts.
 type ServerFileData struct {

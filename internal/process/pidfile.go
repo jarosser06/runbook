@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"runbookmcp.dev/internal/dirs"
 )
 
-const pidsDir = "._dev_tools/pids"
+const pidsDir = dirs.StateDir + "/pids"
 
 // pidFileData is what gets persisted to disk for each running daemon.
 type pidFileData struct {

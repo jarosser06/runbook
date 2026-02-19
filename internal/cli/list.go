@@ -29,13 +29,19 @@ func cmdList() int {
 	}
 
 	var taskNames []string
-	for name := range manifest.Tasks {
+	for name, t := range manifest.Tasks {
+		if t.Disabled {
+			continue
+		}
 		taskNames = append(taskNames, name)
 	}
 	sort.Strings(taskNames)
 
 	var workflowNames []string
-	for name := range manifest.Workflows {
+	for name, wf := range manifest.Workflows {
+		if wf.Disabled {
+			continue
+		}
 		workflowNames = append(workflowNames, name)
 	}
 	sort.Strings(workflowNames)

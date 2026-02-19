@@ -72,6 +72,12 @@ func cmdRun(args []string) int {
 		return 1
 	}
 
+	// Check if task is disabled
+	if taskDef.Disabled {
+		fmt.Fprintf(os.Stderr, "Error: task '%s' is disabled\n", taskName)
+		return 1
+	}
+
 	// Suggest 'start' for daemons
 	if taskDef.Type == config.TaskTypeDaemon {
 		fmt.Fprintf(os.Stderr, "Error: '%s' is a daemon task. Use 'runbook start %s' instead.\n", taskName, taskName)

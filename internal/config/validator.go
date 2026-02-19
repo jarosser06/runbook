@@ -140,8 +140,12 @@ func validatePrompt(name string, prompt Prompt) error {
 		errors = append(errors, fmt.Sprintf("prompt '%s': description is required", name))
 	}
 
-	if prompt.Content == "" {
-		errors = append(errors, fmt.Sprintf("prompt '%s': content is required", name))
+	if prompt.Content == "" && prompt.File == "" {
+		errors = append(errors, fmt.Sprintf("prompt '%s': either content or file is required", name))
+	}
+
+	if prompt.Content != "" && prompt.File != "" {
+		errors = append(errors, fmt.Sprintf("prompt '%s': content and file are mutually exclusive", name))
 	}
 
 	if len(errors) > 0 {

@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"runbookmcp.dev/internal/dirs"
 )
 
 const (
 	// LogDir is the directory where all logs are stored
-	LogDir = "._dev_tools/logs"
+	LogDir = dirs.StateDir + "/logs"
 	// MaxLogSize is the maximum size of a log file before rotation (10MB)
 	MaxLogSize = 10 * 1024 * 1024
 )
@@ -39,8 +41,8 @@ func Setup() error {
 
 	// Check if .gitignore already exists
 	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
-		// Create .gitignore to ignore logs directory
-		content := "logs/\n"
+		// Ignore everything in the state directory — logs, pids, server registry, etc.
+		content := "*\n!.gitignore\n"
 		if err := os.WriteFile(gitignorePath, []byte(content), 0644); err != nil {
 			return fmt.Errorf("failed to create .gitignore: %w", err)
 		}

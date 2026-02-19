@@ -17,6 +17,9 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"runbookmcp.dev/internal/dirs"
+	"runbookmcp.dev/internal/process"
 )
 
 // buildBinary compiles the runbook binary and returns the path. The binary
@@ -73,6 +76,18 @@ workflows:
 `
 }
 
+// writeTestConfig creates the config directory and tasks.yaml in dir with the standard test config.
+func writeTestConfig(t *testing.T, dir string) {
+	t.Helper()
+	runbookDir := filepath.Join(dir, dirs.ConfigDir)
+	if err := os.MkdirAll(runbookDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runbookDir, "tasks.yaml"), []byte(testConfig()), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // freePort returns an available TCP port.
 func freePort(t *testing.T) int {
 	t.Helper()
@@ -85,16 +100,16 @@ func freePort(t *testing.T) int {
 	return port
 }
 
-// serverJSON is the shape of ._dev_tools/server.json.
+// serverJSON is the shape of the server registry file.
 type serverJSON struct {
 	Addr string `json:"addr"`
 	PID  int    `json:"pid"`
 }
 
-// readServerJSON parses ._dev_tools/server.json from the given dir.
+// readServerJSON parses the server registry file from the given dir.
 func readServerJSON(t *testing.T, dir string) serverJSON {
 	t.Helper()
-	path := filepath.Join(dir, "._dev_tools", "server.json")
+	path := filepath.Join(dir, process.ServerRegistryFile)
 	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read server.json: %v", err)
@@ -107,7 +122,7 @@ func readServerJSON(t *testing.T, dir string) serverJSON {
 }
 
 // startServer launches the binary in -serve mode and waits until
-// ._dev_tools/server.json appears (or the deadline). It returns the process
+// ._runbook/server.json appears (or the deadline). It returns the process
 // so the caller can stop it, plus the port it's listening on.
 func startServer(t *testing.T, bin, dir string, port int) *os.Process {
 	t.Helper()
@@ -123,7 +138,7 @@ func startServer(t *testing.T, bin, dir string, port int) *os.Process {
 	// caller forgets to defer proc.Kill() or if the test panics.
 	t.Cleanup(func() { cmd.Process.Kill() }) //nolint:errcheck
 
-	registryPath := filepath.Join(dir, "._dev_tools", "server.json")
+	registryPath := filepath.Join(dir, process.ServerRegistryFile)
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(registryPath); err == nil {
@@ -155,13 +170,11 @@ func runCLI(t *testing.T, bin, dir string, args ...string) (string, int) {
 }
 
 // TestIntegrationServerRegistryWrittenOnStart verifies that starting the HTTP
-// server creates ._dev_tools/server.json with the correct address and a valid PID.
+// server creates ._runbook/server.json with the correct address and a valid PID.
 func TestIntegrationServerRegistryWrittenOnStart(t *testing.T) {
 	bin := buildBinary(t)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".dev_workflow.yaml"), []byte(testConfig()), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestConfig(t, dir)
 
 	port := freePort(t)
 	proc := startServer(t, bin, dir, port)
@@ -179,13 +192,11 @@ func TestIntegrationServerRegistryWrittenOnStart(t *testing.T) {
 }
 
 // TestIntegrationGracefulShutdownCleansRegistry verifies that sending SIGTERM
-// to the HTTP server removes ._dev_tools/server.json.
+// to the HTTP server removes ._runbook/server.json.
 func TestIntegrationGracefulShutdownCleansRegistry(t *testing.T) {
 	bin := buildBinary(t)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".dev_workflow.yaml"), []byte(testConfig()), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestConfig(t, dir)
 
 	port := freePort(t)
 	proc := startServer(t, bin, dir, port)
@@ -195,7 +206,7 @@ func TestIntegrationGracefulShutdownCleansRegistry(t *testing.T) {
 		t.Fatalf("SIGTERM: %v", err)
 	}
 	// Wait up to 5 seconds for server.json to disappear.
-	registryPath := filepath.Join(dir, "._dev_tools", "server.json")
+	registryPath := filepath.Join(dir, process.ServerRegistryFile)
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(registryPath); os.IsNotExist(err) {
@@ -211,9 +222,7 @@ func TestIntegrationGracefulShutdownCleansRegistry(t *testing.T) {
 func TestIntegrationCLIAutoDetectsServer(t *testing.T) {
 	bin := buildBinary(t)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".dev_workflow.yaml"), []byte(testConfig()), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestConfig(t, dir)
 
 	port := freePort(t)
 	proc := startServer(t, bin, dir, port)
@@ -233,9 +242,7 @@ func TestIntegrationCLIAutoDetectsServer(t *testing.T) {
 func TestIntegrationCLIRunViaServer(t *testing.T) {
 	bin := buildBinary(t)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".dev_workflow.yaml"), []byte(testConfig()), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestConfig(t, dir)
 
 	port := freePort(t)
 	proc := startServer(t, bin, dir, port)
@@ -255,9 +262,7 @@ func TestIntegrationCLIRunViaServer(t *testing.T) {
 func TestIntegrationCLIRunWorkflowViaServer(t *testing.T) {
 	bin := buildBinary(t)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".dev_workflow.yaml"), []byte(testConfig()), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestConfig(t, dir)
 
 	port := freePort(t)
 	proc := startServer(t, bin, dir, port)
@@ -267,9 +272,9 @@ func TestIntegrationCLIRunWorkflowViaServer(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("runbook run echo-wf exit=%d output=%q", code, out)
 	}
-	// Workflow response contains step results
-	if !strings.Contains(out, "echo-wf") {
-		t.Errorf("expected workflow name in response, got: %q", out)
+	// Workflow response contains step output and summary
+	if !strings.Contains(out, "hello from echo") {
+		t.Errorf("expected step output in workflow response, got: %q", out)
 	}
 }
 
@@ -278,9 +283,7 @@ func TestIntegrationCLIRunWorkflowViaServer(t *testing.T) {
 func TestIntegrationCLILocalFlagBypassesServer(t *testing.T) {
 	bin := buildBinary(t)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".dev_workflow.yaml"), []byte(testConfig()), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestConfig(t, dir)
 
 	port := freePort(t)
 	proc := startServer(t, bin, dir, port)
@@ -302,9 +305,7 @@ func TestIntegrationCLILocalFlagBypassesServer(t *testing.T) {
 func TestIntegrationStaleServerJSONHardError(t *testing.T) {
 	bin := buildBinary(t)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".dev_workflow.yaml"), []byte(testConfig()), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestConfig(t, dir)
 
 	port := freePort(t)
 	proc := startServer(t, bin, dir, port)
@@ -316,7 +317,7 @@ func TestIntegrationStaleServerJSONHardError(t *testing.T) {
 	proc.Wait() //nolint:errcheck
 
 	// Verify server.json was NOT cleaned up (it was killed, not gracefully shut down).
-	registryPath := filepath.Join(dir, "._dev_tools", "server.json")
+	registryPath := filepath.Join(dir, process.ServerRegistryFile)
 	if _, err := os.Stat(registryPath); os.IsNotExist(err) {
 		t.Skip("server cleaned up server.json on kill (unexpected but not a test failure)")
 	}
@@ -335,9 +336,7 @@ func TestIntegrationStaleServerJSONHardError(t *testing.T) {
 func TestIntegrationWorkingDirFlag(t *testing.T) {
 	bin := buildBinary(t)
 	projectDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(projectDir, ".dev_workflow.yaml"), []byte(testConfig()), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestConfig(t, projectDir)
 
 	port := freePort(t)
 
@@ -351,7 +350,7 @@ func TestIntegrationWorkingDirFlag(t *testing.T) {
 	defer cmd.Process.Kill() //nolint:errcheck
 
 	// Wait for server.json to appear in projectDir (not otherDir).
-	registryPath := filepath.Join(projectDir, "._dev_tools", "server.json")
+	registryPath := filepath.Join(projectDir, process.ServerRegistryFile)
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(registryPath); err == nil {
@@ -379,9 +378,7 @@ func TestIntegrationWorkingDirFlag(t *testing.T) {
 func TestIntegrationDaemonViaServer(t *testing.T) {
 	bin := buildBinary(t)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".dev_workflow.yaml"), []byte(testConfig()), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestConfig(t, dir)
 
 	port := freePort(t)
 	proc := startServer(t, bin, dir, port)
@@ -392,8 +389,8 @@ func TestIntegrationDaemonViaServer(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("start sleeper exit=%d output=%q", code, out)
 	}
-	if !strings.Contains(out, `"success":true`) {
-		t.Errorf("expected success in start output, got: %q", out)
+	if !strings.Contains(out, "[STARTED]") {
+		t.Errorf("expected [STARTED] in start output, got: %q", out)
 	}
 
 	// Check status.
@@ -401,8 +398,8 @@ func TestIntegrationDaemonViaServer(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("status sleeper exit=%d output=%q", code, out)
 	}
-	if !strings.Contains(out, `"running":true`) {
-		t.Errorf("expected running=true in status, got: %q", out)
+	if !strings.Contains(out, "[RUNNING]") {
+		t.Errorf("expected [RUNNING] in status output, got: %q", out)
 	}
 
 	// Stop daemon.
@@ -410,8 +407,8 @@ func TestIntegrationDaemonViaServer(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("stop sleeper exit=%d output=%q", code, out)
 	}
-	if !strings.Contains(out, "success") {
-		t.Errorf("expected success in stop output, got: %q", out)
+	if !strings.Contains(out, "[STOPPED]") {
+		t.Errorf("expected [STOPPED] in stop output, got: %q", out)
 	}
 }
 
@@ -420,9 +417,7 @@ func TestIntegrationDaemonViaServer(t *testing.T) {
 func TestIntegrationLogsReadLocally(t *testing.T) {
 	bin := buildBinary(t)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".dev_workflow.yaml"), []byte(testConfig()), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestConfig(t, dir)
 
 	port := freePort(t)
 	proc := startServer(t, bin, dir, port)
@@ -451,14 +446,12 @@ func TestIntegrationLogsReadLocally(t *testing.T) {
 func TestIntegrationStdioProxyHTTPProbeMismatch(t *testing.T) {
 	bin := buildBinary(t)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".dev_workflow.yaml"), []byte(testConfig()), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestConfig(t, dir)
 
 	// Write server.json with our own PID (definitely alive) but an HTTP port
 	// that has nothing listening on it.
-	devToolsDir := filepath.Join(dir, "._dev_tools")
-	if err := os.MkdirAll(devToolsDir, 0755); err != nil {
+	runbookStateDir := filepath.Join(dir, dirs.StateDir)
+	if err := os.MkdirAll(runbookStateDir, 0755); err != nil {
 		t.Fatal(err)
 	}
 	sj := serverJSON{Addr: "http://localhost:19741", PID: os.Getpid()}
@@ -466,7 +459,7 @@ func TestIntegrationStdioProxyHTTPProbeMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(devToolsDir, "server.json"), b, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(runbookStateDir, "server.json"), b, 0644); err != nil {
 		t.Fatal(err)
 	}
 

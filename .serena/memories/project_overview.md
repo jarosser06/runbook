@@ -24,6 +24,13 @@ MCP (Model Context Protocol) server that exposes shell tasks (oneshot and daemon
 - Lint: Use project's configured linter
 - Tidy: `go mod tidy`
 
+## Paths
+- Config directory: `.runbook/` (merged from all *.yaml files in dir)
+- Overrides file: `.runbook.overrides.yaml` (optional, loaded after main manifest)
+- Server registry: `._runbook/server.json`
+- PID files: `._runbook/pids/`
+- Logs: `._runbook/logs/`
+
 ## Key Patterns
 - Config types in `config/types.go`, validation in `validator.go`, merging in `merger.go`
 - Tools registered in `server/tools.go`, daemon tools in `tools_daemon.go`, session tools in `tools_session.go`

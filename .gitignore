@@ -35,17 +35,22 @@ go.work.sum
 bin/
 dist/
 
-# Dev tools directory (logs, PIDs, etc.)
-._dev_tools/
+# Runtime state directory (logs, PIDs, server registry)
+._runbook_state/
 
 # --- dex managed (do not edit) ---
 .dex/
 dex.lock
+.claude/settings.json
+.mcp.json
+.claude/skills/linting/SKILL.md
+.claude/skills/testing/SKILL.md
+.mcp_tasks/typescript_tasks.yaml
+.dev_workflow/typescript.yaml
+.runbook/typescript.yaml
 CLAUDE.md
 .claude/skills/commit-messages/SKILL.md
 .claude/agents/cicd.md
-.mcp.json
-.claude/settings.json
 .claude/skills/code-review/SKILL.md
 .claude/skills/code-review/resources/review-dimensions.md
 .claude/skills/code-review/resources/severity-levels.md
@@ -60,10 +65,7 @@ CLAUDE.md
 .claude/agents/code-reviewer.md
 .claude/rules/review-standards/review-standards.md
 .dev_workflow/code-review.yaml
-.claude/skills/linting/SKILL.md
-.claude/skills/testing/SKILL.md
-.mcp_tasks/typescript_tasks.yaml
-.dev_workflow/typescript.yaml
+.runbook/code-review.yaml
 # --- end dex managed ---
 
 server.pid

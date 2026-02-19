@@ -66,7 +66,7 @@ func (s *Server) registerTools() {
 
 	// Register task-specific tools
 	for taskName, taskDef := range s.manifest.Tasks {
-		if taskDef.DisableMCP {
+		if taskDef.Disabled || taskDef.DisableMCP {
 			continue
 		}
 		switch taskDef.Type {

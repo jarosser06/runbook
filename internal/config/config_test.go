@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"runbookmcp.dev/internal/dirs"
 )
 
 func TestParseManifest(t *testing.T) {
@@ -430,7 +432,7 @@ func TestLoadManifest(t *testing.T) {
 		{
 			name: "load from default location",
 			setupFiles: map[string]string{
-				".dev_workflow.yaml": `version: "1.0"
+				dirs.ConfigDir + "/tasks.yaml": `version: "1.0"
 tasks:
   test:
     description: "Run tests"
@@ -477,7 +479,7 @@ tasks:
 		{
 			name: "invalid manifest",
 			setupFiles: map[string]string{
-				".dev_workflow.yaml": `version: "1.0"
+				dirs.ConfigDir + "/tasks.yaml": `version: "1.0"
 tasks:
   test:
     command: "go test"
@@ -488,15 +490,15 @@ tasks:
 			errorMsg:   "description is required",
 		},
 		{
-			name: "load from .dev_workflow directory",
+			name: "load from .runbook directory",
 			setupFiles: map[string]string{
-				".dev_workflow/tasks.yaml": `version: "1.0"
+				dirs.ConfigDir + "/tasks.yaml": `version: "1.0"
 tasks:
   test:
     description: "Run tests"
     command: "go test"
 `,
-				".dev_workflow/build.yaml": `version: "1.0"
+				dirs.ConfigDir + "/build.yaml": `version: "1.0"
 tasks:
   build:
     description: "Build project"
