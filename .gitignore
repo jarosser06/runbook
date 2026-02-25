@@ -1,0 +1,72 @@
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+#
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Code coverage profiles and other test artifacts
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# env file
+.env
+
+# Editor/IDE
+# .idea/
+# .vscode/
+
+# Build output
+bin/
+dist/
+
+# Runtime state directory (logs, PIDs, server registry)
+._runbook_state/
+
+# --- dex managed (do not edit) ---
+.dex/
+dex.lock
+.claude/settings.json
+.mcp.json
+.claude/skills/linting/SKILL.md
+.claude/skills/testing/SKILL.md
+.mcp_tasks/typescript_tasks.yaml
+.dev_workflow/typescript.yaml
+.runbook/typescript.yaml
+CLAUDE.md
+.claude/skills/commit-messages/SKILL.md
+.claude/agents/cicd.md
+.claude/skills/code-review/SKILL.md
+.claude/skills/code-review/resources/review-dimensions.md
+.claude/skills/code-review/resources/severity-levels.md
+.claude/skills/code-review/resources/language-detection.md
+.claude/skills/code-review/resources/feedback-patterns.md
+.claude/skills/software-engineering/SKILL.md
+.claude/skills/software-engineering/resources/dry-principle.md
+.claude/skills/software-engineering/resources/solid-principles.md
+.claude/skills/software-engineering/resources/module-organization.md
+.claude/skills/software-engineering/resources/abstraction-patterns.md
+.claude/skills/software-engineering/resources/refactoring-strategies.md
+.claude/agents/code-reviewer.md
+.claude/rules/review-standards/review-standards.md
+.dev_workflow/code-review.yaml
+.runbook/code-review.yaml
+# --- end dex managed ---
+
+server.pid
+build/*
