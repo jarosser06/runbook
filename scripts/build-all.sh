@@ -20,8 +20,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BUILD_DIR="${PROJECT_DIR}/build"
 
-# Version sourcing: $VERSION env var > git describe > "dev"
-VERSION="${VERSION:-$(git describe --tags --always 2>/dev/null || echo "dev")}"
+# Version sourcing: $VERSION env var > latest semver tag > "dev"
+VERSION="${VERSION:-$(git tag --sort=-version:refname 2>/dev/null | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || echo "dev")}"
 COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
 DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
