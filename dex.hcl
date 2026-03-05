@@ -2,7 +2,7 @@ project {
   name            = "dev-workflow-mcp"
   agentic_platform = "claude-code"
 
-  update_gitignore = true
+  git_exclude = true
 
   agent_instructions = <<EOF
 # Claude Development Guidelines

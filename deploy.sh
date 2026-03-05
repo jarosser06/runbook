@@ -2,70 +2,88 @@
 set -euo pipefail
 
 ###############################################################################
-# deploy.sh - Build and deploy runbook artifacts to S3 + CloudFront
+# deploy.sh - Build and deploy runbook
 #
 # Usage: ./deploy.sh [flags]
 #
 # Flags:
-#   --infra           Deploy CloudFormation infrastructure first
-#   --clean           Remove build/ directory before building
-#   --web             Only deploy website and install scripts (skip binary builds)
-#   --cert-arn ARN    Override ACM certificate ARN (optional; auto-created otherwise)
+#   --clean   Remove build/ directory before building
+#   --nuke    Destroy all Azure resources
 #
 # This script:
-#   1. Optionally deploys infrastructure
-#   2. Sources infrastructure/config.sh for S3/CloudFront settings
-#   3. Runs scripts/build-all.sh to cross-compile
-#   4. Copies website/ and install scripts into build/
-#   5. Uploads build/ to S3 via aws s3 sync
-#   6. Creates CloudFront invalidation
+#   1. Always provisions/updates Azure infrastructure (idempotent)
+#   2. Deploys website/ to Azure Static Web App
+#   3. If the current commit has a clean semver tag:
+#      - Builds binaries for all platforms
+#      - Uploads artifacts + install scripts to Azure $web blob container
 ###############################################################################
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-DEPLOY_INFRA=false
 CLEAN_BUILD=false
-WEB_ONLY=false
-CERT_ARN=""
+NUKE=false
 
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --infra) DEPLOY_INFRA=true; shift ;;
-    --clean) CLEAN_BUILD=true; shift ;;
-    --web) WEB_ONLY=true; shift ;;
-    --cert-arn) CERT_ARN="$2"; shift 2 ;;
-    *) echo "Unknown flag: $1"; exit 1 ;;
+for arg in "$@"; do
+  case "$arg" in
+    --clean) CLEAN_BUILD=true ;;
+    --nuke)  NUKE=true ;;
+    *) echo "Unknown flag: $arg"; exit 1 ;;
   esac
 done
 
+# ---- Nuke -------------------------------------------------------------------
+if [ "$NUKE" = true ]; then
+  RESOURCE_GROUP="runbook-artifacts-rg"
+  echo "============================================"
+  echo "  DESTROYING all resources in ${RESOURCE_GROUP}"
+  echo "============================================"
+  echo ""
+  read -r -p "Are you sure? This deletes EVERYTHING. [y/N] " confirm
+  if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+    echo "Aborted."
+    exit 0
+  fi
+  echo ""
+  echo "==> Deleting resource group '${RESOURCE_GROUP}'..."
+  az group delete --name "${RESOURCE_GROUP}" --yes --no-wait
+  echo "==> Deletion initiated (runs in background)."
+  rm -f infrastructure/config.sh
+  echo "Done."
+  exit 0
+fi
+
+# ---- Check for a clean semver tag on the current commit ---------------------
+VERSION="$(git describe --exact-match --tags HEAD 2>/dev/null || true)"
+if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  DEPLOY_ARTIFACTS=true
+else
+  DEPLOY_ARTIFACTS=false
+  VERSION="$(git tag --sort=-version:refname 2>/dev/null | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || echo "dev")"
+fi
+
 echo "============================================"
-echo "  Runbook - Build & Deploy"
+echo "  Runbook - Deploy"
 echo "============================================"
 echo ""
-
-# ---- Optionally deploy infrastructure ---------------------------------------
-if [ "$DEPLOY_INFRA" = true ]; then
-  echo "Deploying infrastructure..."
-  INFRA_ARGS=()
-  if [ -n "$CERT_ARN" ]; then
-    INFRA_ARGS+=(--cert-arn "$CERT_ARN")
-  fi
-  "${SCRIPT_DIR}/infrastructure/deploy-infra.sh" "${INFRA_ARGS[@]}"
-  echo ""
+if [ "$DEPLOY_ARTIFACTS" = true ]; then
+  echo "Version         : ${VERSION} (tagged — artifacts will be deployed)"
+else
+  echo "Version         : ${VERSION} (untagged — website only)"
 fi
+echo ""
 
-# ---- Source config -----------------------------------------------------------
+# ---- Deploy infrastructure --------------------------------------------------
+echo "Deploying infrastructure..."
+"${SCRIPT_DIR}/infrastructure/deploy.sh"
+echo ""
+
+# ---- Source config ----------------------------------------------------------
 CONFIG_FILE="${SCRIPT_DIR}/infrastructure/config.sh"
-if [ ! -f "$CONFIG_FILE" ]; then
-  echo "ERROR: ${CONFIG_FILE} not found."
-  echo "Run ./infrastructure/deploy-infra.sh first, or use --infra flag."
-  exit 1
-fi
 
 source "$CONFIG_FILE"
-echo "S3 Bucket       : ${S3_BUCKET}"
-echo "Distribution ID : ${CLOUDFRONT_DISTRIBUTION_ID}"
+echo "Storage Account : ${STORAGE_ACCOUNT}"
 echo "Artifacts URL   : ${ARTIFACTS_URL}"
+echo "Website URL     : ${WEBSITE_URL}"
 echo ""
 
 # ---- Optionally clean -------------------------------------------------------
@@ -75,55 +93,54 @@ if [ "$CLEAN_BUILD" = true ]; then
   echo ""
 fi
 
-# ---- Build all platforms -----------------------------------------------------
-if [ "$WEB_ONLY" = false ]; then
+# ---- Build and upload artifacts (tagged releases only) ----------------------
+if [ "$DEPLOY_ARTIFACTS" = true ]; then
   echo "Building all platforms..."
-  "${SCRIPT_DIR}/scripts/build-all.sh"
+  VERSION="${VERSION}" "${SCRIPT_DIR}/scripts/build-all.sh"
+  echo ""
+
+  echo "Copying install scripts to build/..."
+  cp "${SCRIPT_DIR}/scripts/install.sh" "${SCRIPT_DIR}/build/"
+  cp "${SCRIPT_DIR}/scripts/install.ps1" "${SCRIPT_DIR}/build/"
+  echo "  -> install.sh"
+  echo "  -> install.ps1"
+  echo ""
+
+  echo "Uploading artifacts to Azure Blob Storage..."
+  echo "  Container: ${CONTAINER_NAME}"
+  az storage blob upload-batch \
+    --account-name "${STORAGE_ACCOUNT}" \
+    --destination "${CONTAINER_NAME}" \
+    --source "${SCRIPT_DIR}/build" \
+    --overwrite \
+    --auth-mode key \
+    --output none
+  echo ""
+else
+  echo "Skipping artifact build (no semver tag on current commit)."
   echo ""
 fi
 
-# ---- Copy website and install scripts into build/ ---------------------------
-echo "Copying website files to build/..."
-if [ -d "${SCRIPT_DIR}/website" ]; then
-  cp -r "${SCRIPT_DIR}/website/." "${SCRIPT_DIR}/build/"
-  echo "  -> website/"
+# ---- Deploy website to Azure Static Web App ---------------------------------
+if [ -z "${DEPLOYMENT_TOKEN:-}" ]; then
+  echo "WARNING: DEPLOYMENT_TOKEN not set in config.sh — skipping website deploy."
+  echo "         Run with --infra to provision the Static Web App."
+else
+  echo "Deploying website to Azure Static Web App..."
+  SWA_CLI_DEPLOYMENT_TOKEN="${DEPLOYMENT_TOKEN}" \
+    npx --yes @azure/static-web-apps-cli@latest deploy \
+    --output-location "${SCRIPT_DIR}/website" \
+    --env production
+  echo ""
 fi
 
-echo "Copying install scripts to build/..."
-cp "${SCRIPT_DIR}/scripts/install.sh" "${SCRIPT_DIR}/build/"
-cp "${SCRIPT_DIR}/scripts/install.ps1" "${SCRIPT_DIR}/build/"
-echo "  -> install.sh"
-echo "  -> install.ps1"
-echo ""
-
-# ---- Upload to S3 ------------------------------------------------------------
-echo "Uploading to S3..."
-aws s3 sync "${SCRIPT_DIR}/build/" "s3://${S3_BUCKET}/" \
-  --delete \
-  --region us-west-2
-
-echo ""
-
-# ---- CloudFront invalidation -------------------------------------------------
-echo "Creating CloudFront invalidation..."
-INVALIDATION_ID=$(aws cloudfront create-invalidation \
-  --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
-  --paths "/*" \
-  --query 'Invalidation.Id' \
-  --output text)
-
-echo "Waiting for invalidation ${INVALIDATION_ID} to complete..."
-aws cloudfront wait invalidation-completed \
-  --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
-  --id "${INVALIDATION_ID}"
-
-echo ""
 echo "============================================"
 echo "  Deploy complete!"
 echo "============================================"
 echo ""
-echo "Artifacts available at: ${ARTIFACTS_URL}"
+echo "Artifacts : ${ARTIFACTS_URL}"
+echo "Website   : ${WEBSITE_URL}"
 echo ""
-echo "Install (unix):       curl -fsSL ${ARTIFACTS_URL}/install.sh | bash"
-echo "Install (powershell): irm ${ARTIFACTS_URL}/install.ps1 | iex"
+echo "Install (unix):       curl -fsSL ${ARTIFACTS_URL}install.sh | bash"
+echo "Install (powershell): irm ${ARTIFACTS_URL}install.ps1 | iex"
 echo ""

@@ -5,14 +5,14 @@ set -euo pipefail
 # install.sh - Install runbook binary
 #
 # Usage:
-#   curl -fsSL https://runbookmcp.dev/install.sh | bash
-#   curl -fsSL https://runbookmcp.dev/install.sh | bash -s -- --version 0.1.0
+#   curl -fsSL https://runbookproduction.z13.web.core.windows.net/install.sh | bash
+#   curl -fsSL https://runbookproduction.z13.web.core.windows.net/install.sh | bash -s -- --version 0.1.0
 #
 # Options:
 #   --version <ver>  Install a specific version (default: latest)
 ###############################################################################
 
-ARTIFACTS_URL="https://runbookmcp.dev"
+ARTIFACTS_URL="https://runbookproduction.z13.web.core.windows.net"
 INSTALL_DIR="${HOME}/.bin"
 BINARY_NAME="runbook"
 
@@ -59,6 +59,16 @@ if [ -z "$VERSION" ]; then
     echo "Error: Could not fetch latest version from ${ARTIFACTS_URL}/latest"
     exit 1
   }
+fi
+
+# Strip leading 'v' for validation
+VERSION_BARE="${VERSION#v}"
+
+# Require clean semver (MAJOR.MINOR.PATCH only — no commit hash or pre-release suffix)
+if ! echo "$VERSION_BARE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+  echo "Error: Version '${VERSION}' is not a release version."
+  echo "Only tagged releases (e.g. 1.2.3) are supported, not dev builds."
+  exit 1
 fi
 
 ARCHIVE="runbook-${VERSION}-${OS}-${ARCH}.tar.gz"

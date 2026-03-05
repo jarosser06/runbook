@@ -1,7 +1,7 @@
 # install.ps1 - Install runbook binary on Windows
 #
 # Usage:
-#   irm https://runbookmcp.dev/install.ps1 | iex
+#   irm https://runbookproduction.z13.web.core.windows.net/install.ps1 | iex
 #   .\install.ps1 -Version 0.1.0
 
 param(
@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 # Ensure TLS 1.2
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-$ArtifactsUrl = "https://runbookmcp.dev"
+$ArtifactsUrl = "https://runbookproduction.z13.web.core.windows.net"
 $InstallDir = "$HOME\.bin"
 $BinaryName = "runbook.exe"
 
@@ -33,6 +33,14 @@ if (-not $Version) {
         Write-Host "Details: $_" -ForegroundColor Red
         exit 1
     }
+}
+
+# Require clean semver (MAJOR.MINOR.PATCH only — no commit hash or pre-release suffix)
+$VersionBare = $Version -replace '^v', ''
+if ($VersionBare -notmatch '^\d+\.\d+\.\d+$') {
+    Write-Host "ERROR: Version '$Version' is not a release version." -ForegroundColor Red
+    Write-Host "Only tagged releases (e.g. 1.2.3) are supported, not dev builds." -ForegroundColor Red
+    exit 1
 }
 
 $Archive = "runbook-$Version-windows-amd64.zip"
