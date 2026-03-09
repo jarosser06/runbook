@@ -52,24 +52,20 @@ if [ "$NUKE" = true ]; then
   exit 0
 fi
 
-# ---- Check for a clean semver tag on the current commit ---------------------
-VERSION="$(git describe --exact-match --tags HEAD 2>/dev/null || true)"
+# ---- Resolve version from latest semver tag ---------------------------------
+VERSION="$(git tag --sort=-version:refname 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || echo "dev")"
+
 if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   DEPLOY_ARTIFACTS=true
 else
   DEPLOY_ARTIFACTS=false
-  VERSION="$(git tag --sort=-version:refname 2>/dev/null | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || echo "dev")"
 fi
 
 echo "============================================"
 echo "  Runbook - Deploy"
 echo "============================================"
 echo ""
-if [ "$DEPLOY_ARTIFACTS" = true ]; then
-  echo "Version         : ${VERSION} (tagged — artifacts will be deployed)"
-else
-  echo "Version         : ${VERSION} (untagged — website only)"
-fi
+echo "Version         : ${VERSION}"
 echo ""
 
 # ---- Deploy infrastructure --------------------------------------------------
@@ -93,7 +89,23 @@ if [ "$CLEAN_BUILD" = true ]; then
   echo ""
 fi
 
-# ---- Build and upload artifacts (tagged releases only) ----------------------
+# ---- Check if latest version is already in the bucket ----------------------
+if [ "$DEPLOY_ARTIFACTS" = false ] && [ "$VERSION" != "dev" ]; then
+  BUCKET_LATEST="$(az storage blob download \
+    --account-name "${STORAGE_ACCOUNT}" \
+    --container-name "${CONTAINER_NAME}" \
+    --name "latest" \
+    --file /dev/stdout \
+    --auth-mode key \
+    --output none \
+    2>/dev/null | tr -d '[:space:]' || true)"
+  if [ "$BUCKET_LATEST" != "$VERSION" ]; then
+    echo "Latest tag ${VERSION} not found in bucket (bucket has: ${BUCKET_LATEST:-none}) — building artifacts."
+    DEPLOY_ARTIFACTS=true
+  fi
+fi
+
+# ---- Build and upload artifacts ---------------------------------------------
 if [ "$DEPLOY_ARTIFACTS" = true ]; then
   echo "Building all platforms..."
   VERSION="${VERSION}" "${SCRIPT_DIR}/scripts/build-all.sh"
@@ -117,7 +129,7 @@ if [ "$DEPLOY_ARTIFACTS" = true ]; then
     --output none
   echo ""
 else
-  echo "Skipping artifact build (no semver tag on current commit)."
+  echo "Skipping artifact build (${VERSION} already in bucket)."
   echo ""
 fi
 
