@@ -39,8 +39,8 @@ deps:
 # Install binary to $HOME/.bin/
 install: build
 	@echo "Installing binary..."
-	@mkdir -p $(HOME)/.bin
-	cp bin/runbook $(HOME)/.bin/
+	@mkdir -p $(HOME)/.local/bin
+	cp bin/runbook $(HOME)/.local/bin/
 	@echo "Installed to $(HOME)/.bin/runbook"
 
 # Run the server (for testing)

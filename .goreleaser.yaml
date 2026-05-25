@@ -56,7 +56,7 @@ changelog:
 
 release:
   github:
-    owner: launchcg
+    owner: jarosser06
     name: runbook
   draft: false
   prerelease: auto

