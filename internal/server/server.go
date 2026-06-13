@@ -72,6 +72,11 @@ func NewServer(manifest *config.Manifest, manager *task.Manager, processManager 
 
 // Serve starts the MCP server over stdio
 func (s *Server) Serve() error {
+	// set_working_directory is only registered in local stdio mode, where a
+	// single client owns this process. It performs a process-global os.Chdir,
+	// which would break the cooperative multi-client model of HTTP server mode,
+	// so ServeHTTP deliberately does not register it.
+	s.registerSetWorkingDirTool()
 	return server.ServeStdio(s.mcpServer)
 }
 

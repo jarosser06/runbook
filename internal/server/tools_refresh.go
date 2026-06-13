@@ -53,17 +53,28 @@ func (s *Server) Refresh() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Reload config from the same path used at startup
-	manifest, loaded, err := config.LoadManifest(s.configPath)
+	loaded, err := s.reloadLocked()
 	if err != nil {
-		return fmt.Errorf("failed to reload config: %w", err)
+		return err
 	}
-
 	if !loaded {
 		return fmt.Errorf("no config found at startup path %q", s.configPath)
 	}
+	return nil
+}
 
-	// Collect current tool names to remove them
+// reloadLocked reloads config from s.configPath and re-registers all tools,
+// resources, and prompts. The caller must hold s.mu. It returns whether a
+// config file was actually found and loaded.
+func (s *Server) reloadLocked() (bool, error) {
+	// Reload config from the current config path
+	manifest, loaded, err := config.LoadManifest(s.configPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to reload config: %w", err)
+	}
+
+	// Collect current tool names to remove them (uses the old manifest, so it
+	// must run before s.manifest is replaced)
 	oldToolNames := s.collectToolNames()
 
 	// Update server state
@@ -86,7 +97,7 @@ func (s *Server) Refresh() error {
 	s.registerResources()
 	s.registerPrompts()
 
-	return nil
+	return loaded, nil
 }
 
 // collectToolNames returns the names of all currently registered task-derived tools.
